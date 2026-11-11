@@ -15,5 +15,5 @@ targets:
     toolchain:
       # Version recommended by the SDK's gcc/README.md.
       arm-gnu: 12.3.rel1
-    triggers: [nightly]
+    triggers: [nightly, on-change]
     timeout: 60

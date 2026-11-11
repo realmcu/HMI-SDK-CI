@@ -18,7 +18,8 @@ and never pushes to any product repository.
 | `scripts/` | `plan.py`, `fetch.py`, `toolchain.py` and other shared CI scripts |
 | `scripts/adapters/` | Build adapters, one per build system |
 | `tests/` | Tests for `scripts/` |
-| `.github/workflows/hmi-ci.yml` | The workflow |
+| `.github/workflows/hmi-ci.yml` | Plan, build and aggregate |
+| `.github/workflows/poll.yml` | Manifest change polling |
 
 ## `targets.yml`
 
@@ -99,6 +100,24 @@ when there is one, and runs the build adapter. Reports are uploaded as
 A network failure on a gitee repository is retried, then retried against `fallback_manifest` (for the
 `locked` track, a mirror copy derived from the lock). A failure on a github repository has no mirror
 to fall back to. A build from the mirror never produces a lock promotion.
+
+## Results across runs
+
+After the builds, `scripts/aggregate.py` compares every target/track with the previous recorded run
+(a scheduled or manually dispatched run; push and pull-request runs are CI self-tests and are not
+recorded) and labels it *new failure*, *still failing (N runs)*, *recovered* or *unverified*.
+`FETCH_FAIL` neither starts nor ends a failure streak. Counts are per run, not per calendar day,
+because scheduled runs are sometimes delayed by hours or skipped. The comparison input is the
+`results-<run id>` artifact, kept for 90 days.
+
+## Manifest change polling
+
+`.github/workflows/poll.yml` runs every two hours. It compares the manifest repository's `master`
+with the head recorded in `state.json` on this repository's `state` branch. When it moved, the
+targets with `on-change` whose manifest, fallback or lock changed are dispatched to `hmi-ci.yml` at
+that exact commit; when nothing moved, nothing is built. `state.json` is committed when the head
+moves and at least once a day, which also keeps this repository active so GitHub does not disable
+its scheduled workflows.
 
 ## Local checks
 
