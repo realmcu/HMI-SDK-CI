@@ -108,6 +108,8 @@ def test_top_level_errors(data, expected):
         ({"toolchain": {}}, ".toolchain: must be a non-empty mapping"),
         ({"toolchain": {"arm-gnu": 12.3}}, ".toolchain.arm-gnu: version must be a quoted string"),
         ({"toolchain": {"Arm GNU": "12.3"}}, ".toolchain: tool name must be"),
+        ({"toolchain": {"zephyr-sdk": "0.16.8"}}, ".toolchain.zephyr-sdk: unknown tool"),
+        ({"toolchain": {"arm-gnu": "14.1.rel1"}}, ".toolchain.arm-gnu: no pinned release"),
         ({"triggers": []}, ".triggers: must not be empty"),
         ({"triggers": ["push"]}, ".triggers: must be one of"),
         ({"triggers": ["nightly", "nightly"]}, ".triggers: duplicate entry"),

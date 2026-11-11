@@ -202,6 +202,11 @@ jobs:
           TOOLCHAIN_OUTCOME: ${{ steps.toolchain.outcome }}
           FETCH_OUTCOME: ${{ steps.fetch.outcome }}
           BUILD_OUTCOME: ${{ steps.build.outcome }}
+          TARGET_ID: ${{ matrix.id }}
+          TIER: ${{ matrix.tier }}
+          TRACK: ${{ matrix.track }}
+          MANIFEST: ${{ matrix.manifest }}
+          MANIFEST_COMMIT: ${{ needs.plan.outputs.manifest_commit }}
         run: |
           build_result="$(python -c 'import json,sys; print(json.load(open(sys.argv[1])).get("result",""))' "${REPORT_DIR}/build/summary.json" 2>/dev/null || true)"
           if [ "${TOOLCHAIN_OUTCOME}" != "success" ]; then
@@ -221,22 +226,22 @@ jobs:
           from pathlib import Path
           report = Path(os.environ["REPORT_DIR"])
           result = {
-              "id": "${{ matrix.id }}",
-              "tier": "${{ matrix.tier }}",
-              "track": "${{ matrix.track }}",
-              "manifest": os.environ.get("FETCHED_MANIFEST") or "${{ matrix.manifest }}",
+              "id": os.environ["TARGET_ID"],
+              "tier": os.environ["TIER"],
+              "track": os.environ["TRACK"],
+              "manifest": os.environ.get("FETCHED_MANIFEST") or os.environ["MANIFEST"],
               "used_fallback": os.environ.get("USED_FALLBACK") == "true",
               "status": sys.argv[1],
               "ci_commit": os.environ["GITHUB_SHA"],
-              "manifest_commit": "${{ needs.plan.outputs.manifest_commit }}",
+              "manifest_commit": os.environ["MANIFEST_COMMIT"],
           }
           (report / "result.json").write_text(json.dumps(result, indent=2) + "\n")
           PY
-          echo "::notice::${{ matrix.id }} (${{ matrix.track }}): ${status}"
+          echo "::notice::${TARGET_ID} (${TRACK}): ${status}"
           {
-            echo "## \`${{ matrix.id }}\` (${{ matrix.track }}): ${status}"
+            echo "## \`${TARGET_ID}\` (${TRACK}): ${status}"
             echo
-            echo "Manifest: \`${FETCHED_MANIFEST:-${{ matrix.manifest }}}\`"
+            echo "Manifest: \`${FETCHED_MANIFEST:-${MANIFEST}}\`"
             if [ "${USED_FALLBACK}" = "true" ]; then
               echo
               echo "_Fetched from the GitHub mirror after a gitee network failure; no lock promotion is produced from this run._"

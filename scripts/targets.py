@@ -10,6 +10,8 @@ from typing import Any, Callable
 
 import yaml
 
+from toolchain import TOOLS
+
 SCHEMA_VERSION = 1
 TIERS = ("customer", "preview", "disabled")
 VERSION_MODELS = ("pinned", "mixed", "floating")
@@ -150,8 +152,16 @@ def _check_toolchain(value: Any, where: str, errors: list[str]) -> None:
     for tool, version in value.items():
         if not isinstance(tool, str) or not TOOL_PATTERN.match(tool):
             errors.append(f"{where}: tool name must be lowercase words joined by '-' (got {tool!r})")
+            continue
         if not isinstance(version, str) or not version:
-            errors.append(f"{_join(where, str(tool))}: version must be a quoted string (got {version!r})")
+            errors.append(f"{_join(where, tool)}: version must be a quoted string (got {version!r})")
+            continue
+        if tool not in TOOLS:
+            errors.append(f"{_join(where, tool)}: unknown tool; known: {', '.join(TOOLS)}")
+        elif version not in TOOLS[tool]:
+            errors.append(
+                f"{_join(where, tool)}: no pinned release for {version!r}; known: {', '.join(TOOLS[tool])}"
+            )
 
 
 def _validate_hmi_west(build: dict[str, Any], where: str, errors: list[str]) -> None:

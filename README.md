@@ -15,7 +15,8 @@ and never pushes to any product repository.
 | Path | Purpose |
 | --- | --- |
 | `targets.yml` | The SDK targets to verify. The workflow reads only this file; adding a target does not change the workflow. |
-| `scripts/` | `plan.py` and the shared CI scripts |
+| `scripts/` | `plan.py`, `fetch.py`, `toolchain.py` and other shared CI scripts |
+| `scripts/adapters/` | Build adapters, one per build system |
 | `tests/` | Tests for `scripts/` |
 | `.github/workflows/hmi-ci.yml` | The workflow |
 
@@ -54,7 +55,11 @@ Unknown fields and duplicate keys are errors, so a misspelt field cannot be sile
 
 | `builder` | `build` fields |
 | --- | --- |
-| `hmi-west` | `profile`: `quick` (bank 0 only) or `full` (all four modes) |
+| `hmi-west` | `profile`: `quick` (bank 0 only) or `full` (all four modes). Runs the manifest repository's `scripts/verify_dashboard.py`. |
+
+| `toolchain` key | Versions |
+| --- | --- |
+| `arm-gnu` | `12.3.rel1`, `13.2.rel1` (Arm GNU Toolchain, x86_64 Linux host) |
 
 ## Plan
 
@@ -74,7 +79,26 @@ floats. Branches and tags are told apart with anonymous `git ls-remote`; if a re
 reached the model is not checked and a warning is reported instead.
 
 A target with a `lock_manifest` gets two build jobs, `floating` and `locked`; any other target gets
-one, `main`.
+one, `main`. Every job builds the manifest commit the plan saw, even if master moves during the run.
+
+## Build jobs
+
+Each job installs the declared toolchain (`scripts/toolchain.py`: official release archive, SHA-256
+checked, cached), fetches the workspace (`scripts/fetch.py`), writes a drift report against the lock
+when there is one, and runs the build adapter. Reports are uploaded as
+`report-<id>-<track>-<run id>`.
+
+| Result | Meaning |
+| --- | --- |
+| `PASS` | Fetched and built; required artifacts present |
+| `BUILD_FAIL` | Fetched, but the build or an artifact check failed |
+| `FETCH_FAIL` | Network failure on every source tried (timeouts, resets, TLS errors, HTTP 429/5xx). The code was not verified |
+| `MANIFEST_FAIL` | Fetch failed for a reason a retry cannot fix: repository not found or private, missing branch, unknown SHA |
+| `INFRA_FAIL` | Toolchain install failed, an adapter reported an environment error, or `targets.yml` is out of date |
+
+A network failure on a gitee repository is retried, then retried against `fallback_manifest` (for the
+`locked` track, a mirror copy derived from the lock). A failure on a github repository has no mirror
+to fall back to. A build from the mirror never produces a lock promotion.
 
 ## Local checks
 
