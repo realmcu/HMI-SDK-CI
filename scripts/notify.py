@@ -458,8 +458,7 @@ def send(
                     server.login(smtp.user, smtp.password)
                     server.send_message(msg)
                 break
-            except smtplib.SMTPAuthenticationError:
-                raise
+            # 163 also answers a valid login with 535 now and then, so 535 is retried too.
             except (smtplib.SMTPException, OSError) as exc:
                 if attempt == SEND_ATTEMPTS:
                     raise

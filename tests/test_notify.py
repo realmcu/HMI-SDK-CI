@@ -252,7 +252,9 @@ def test_weekly_goes_to_everyone_in_the_table(tmp_path):
 
 class FakeSMTP:
     sent: list = []
+    logins = 0
     failures = 0
+    auth_failures = 0
 
     def __init__(self, host, port, context=None, timeout=None):
         if FakeSMTP.failures:
@@ -266,6 +268,10 @@ class FakeSMTP:
         return False
 
     def login(self, user, password):
+        FakeSMTP.logins += 1
+        if FakeSMTP.auth_failures:
+            FakeSMTP.auth_failures -= 1
+            raise smtplib.SMTPAuthenticationError(535, b"Error: authentication failed")
         if password != "right":
             raise smtplib.SMTPAuthenticationError(535, b"bad")
 
@@ -273,13 +279,24 @@ class FakeSMTP:
         FakeSMTP.sent.append(msg["Subject"])
 
 
-def test_send_retries_network_errors_but_not_bad_credentials():
+def send_with_fake(password, failures=0, auth_failures=0):
     msg = notify.build_message("ci-bot@163.com", [CI], "s", [("p", "x")])
-    FakeSMTP.sent, FakeSMTP.failures = [], 1
-    notify.send(notify.Smtp("ci-bot@163.com", "right", "smtp.163.com"), [msg], connect=FakeSMTP, sleep=lambda s: None)
+    FakeSMTP.sent, FakeSMTP.logins = [], 0
+    FakeSMTP.failures, FakeSMTP.auth_failures = failures, auth_failures
+    notify.send(notify.Smtp("ci-bot@163.com", password, "smtp.163.com"), [msg], connect=FakeSMTP, sleep=lambda s: None)
+
+
+def test_send_retries_network_errors_and_sporadic_auth_rejections():
+    send_with_fake("right", failures=1)
     assert FakeSMTP.sent == ["s"]
+    send_with_fake("right", auth_failures=1)
+    assert FakeSMTP.sent == ["s"]
+
+
+def test_send_gives_up_on_bad_credentials():
     with pytest.raises(smtplib.SMTPAuthenticationError):
-        notify.send(notify.Smtp("ci-bot@163.com", "wrong", "smtp.163.com"), [msg], connect=FakeSMTP, sleep=lambda s: None)
+        send_with_fake("wrong")
+    assert FakeSMTP.logins == notify.SEND_ATTEMPTS and FakeSMTP.sent == []
 
 
 def test_smtp_host_defaults_to_sender_domain():

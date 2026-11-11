@@ -22,3 +22,4 @@ targets:
       arm-gnu: 12.3.rel1
     triggers: [nightly, on-change]
     timeout: 60
+    owners: [luke_sun@realsil.com.cn]
