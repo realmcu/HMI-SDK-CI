@@ -1,0 +1,6 @@
+=== updating x (x):
+--- x: initializing
+Initialized empty Git repository in /tmp/west-err/badbranch/x/.git/
+--- x: fetching, need revision no-such-branch-zz
+fatal: couldn't find remote ref no-such-branch-zz
+ERROR: update failed for project x

@@ -1,0 +1,60 @@
+--- Creating /home/runner/work/HMI-MANIFEST/HMI-MANIFEST/.west and local configuration file
+=== updating rtl87x3ep-hmi-sdk (sdk):
+--- rtl87x3ep-hmi-sdk: initializing
+--- rtl87x3ep-hmi-sdk: fetching, need revision 9f2a1130fde318c6df7d8d629579ab7de020d0e1
+=== updating hmi-dashboard (sdk/board/evb/hmi_dashboard):
+--- hmi-dashboard: initializing
+--- hmi-dashboard: fetching, need revision 10814119cd7fedb777d1ec54e9796afbd66d4e78
+=== updating wearable (sdk/src/app/Wearable):
+--- wearable: initializing
+--- wearable: fetching, need revision 0f95348d5f3f6ef95525eea22361e196e85a1a49
+error: RPC failed; curl 56 GnuTLS recv error (-110): The TLS connection was non-properly terminated.
+error: 50802 bytes of body are still expected
+fatal: early EOF
+fatal: fetch-pack: invalid index-pack output
+=== updating HoneyGUI (sdk/src/sample/gui):
+--- HoneyGUI: initializing
+--- HoneyGUI: fetching, need revision 472bd22e0d69aa68306a86bc9cccbafb2c4df108
+=== updating display (sdk/src/mcu/display):
+--- display: initializing
+--- display: fetching, need revision 82c8e046412a226d825815ea1e687912a7b387e1
+=== updating ui (sdk/board/evb/hmi_dashboard/src/application/designer):
+--- ui: initializing
+--- ui: fetching, need revision 8e1399a4194656ffe498bf0a97caa780d1041160
+ERROR: update failed for project wearable
+=== updating rtl87x3ep-hmi-sdk (sdk):
+=== updating hmi-dashboard (sdk/board/evb/hmi_dashboard):
+=== updating wearable (sdk/src/app/Wearable):
+--- wearable: fetching, need revision 0f95348d5f3f6ef95525eea22361e196e85a1a49
+error: RPC failed; curl 56 GnuTLS recv error (-110): The TLS connection was non-properly terminated.
+error: 564 bytes of body are still expected
+fatal: early EOF
+fatal: fetch-pack: invalid index-pack output
+=== updating HoneyGUI (sdk/src/sample/gui):
+=== updating display (sdk/src/mcu/display):
+=== updating ui (sdk/board/evb/hmi_dashboard/src/application/designer):
+ERROR: update failed for project wearable
+=== updating rtl87x3ep-hmi-sdk (sdk):
+=== updating hmi-dashboard (sdk/board/evb/hmi_dashboard):
+=== updating wearable (sdk/src/app/Wearable):
+--- wearable: fetching, need revision 0f95348d5f3f6ef95525eea22361e196e85a1a49
+error: RPC failed; curl 56 GnuTLS recv error (-110): The TLS connection was non-properly terminated.
+error: 5975 bytes of body are still expected
+fatal: early EOF
+fatal: fetch-pack: invalid index-pack output
+=== updating HoneyGUI (sdk/src/sample/gui):
+=== updating display (sdk/src/mcu/display):
+=== updating ui (sdk/board/evb/hmi_dashboard/src/application/designer):
+ERROR: update failed for project wearable
+=== updating rtl87x3ep-hmi-sdk (sdk):
+=== updating hmi-dashboard (sdk/board/evb/hmi_dashboard):
+=== updating wearable (sdk/src/app/Wearable):
+--- wearable: fetching, need revision 0f95348d5f3f6ef95525eea22361e196e85a1a49
+error: RPC failed; curl 56 GnuTLS recv error (-110): The TLS connection was non-properly terminated.
+error: 6786 bytes of body are still expected
+fatal: early EOF
+fatal: fetch-pack: invalid index-pack output
+=== updating HoneyGUI (sdk/src/sample/gui):
+=== updating display (sdk/src/mcu/display):
+=== updating ui (sdk/board/evb/hmi_dashboard/src/application/designer):
+ERROR: update failed for project wearable

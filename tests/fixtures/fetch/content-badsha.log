@@ -1,0 +1,6 @@
+=== updating x (x):
+--- x: initializing
+Initialized empty Git repository in /tmp/west-err/badsha/x/.git/
+--- x: fetching, need revision 0123456789abcdef0123456789abcdef01234567
+fatal: remote error: upload-pack: not our ref 0123456789abcdef0123456789abcdef01234567
+ERROR: update failed for project x

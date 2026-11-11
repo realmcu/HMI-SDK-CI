@@ -128,13 +128,16 @@ def matrix_entries(plan: TargetPlan) -> list[dict]:
     }
     if target.lock_manifest is None:
         return [{**base, "track": "main", "manifest": target.manifest,
-                 "fallback_manifest": target.fallback_manifest}]
-    # The locked track gets no fallback entry: its mirror manifest is derived
-    # from the lock at fetch time so the two can never drift apart.
+                 "fallback_manifest": target.fallback_manifest, "lock_manifest": None,
+                 "derive_fallback": False}]
+    # The locked track derives its mirror manifest from the lock at fetch time,
+    # so the two can never drift apart.
     return [
         {**base, "track": "floating", "manifest": target.manifest,
-         "fallback_manifest": target.fallback_manifest},
-        {**base, "track": "locked", "manifest": target.lock_manifest, "fallback_manifest": None},
+         "fallback_manifest": target.fallback_manifest, "lock_manifest": target.lock_manifest,
+         "derive_fallback": False},
+        {**base, "track": "locked", "manifest": target.lock_manifest, "fallback_manifest": None,
+         "lock_manifest": None, "derive_fallback": target.fallback_manifest is not None},
     ]
 
 
@@ -246,6 +249,7 @@ def main(argv: list[str] | None = None, resolve: RefResolver | None = None) -> i
             handle.write(summary_markdown(report))
     _write_github_output("matrix", json.dumps(report["matrix"], separators=(",", ":")))
     _write_github_output("errors", str(error_count))
+    _write_github_output("jobs", str(len(report["matrix"]["include"])))
     print(f"{len(report['matrix']['include'])} build job(s), {error_count} plan error(s)")
     return 0
 

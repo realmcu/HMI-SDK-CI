@@ -249,10 +249,13 @@ def test_nightly_plan(workspace):
     assert list(targets) == ["e-dashboard"]
     assert targets["e-dashboard"]["status"] == "PLANNED"
     assert targets["e-dashboard"]["errors"] == []
-    tracks = [(e["track"], e["manifest"], e["fallback_manifest"]) for e in report["matrix"]["include"]]
+    tracks = [
+        (e["track"], e["manifest"], e["fallback_manifest"], e["lock_manifest"], e["derive_fallback"])
+        for e in report["matrix"]["include"]
+    ]
     assert tracks == [
-        ("floating", "dashboard/e-gitee.yml", "dashboard/e-github.yml"),
-        ("locked", "dashboard/e-gitee.lock.yml", None),
+        ("floating", "dashboard/e-gitee.yml", "dashboard/e-github.yml", "dashboard/e-gitee.lock.yml", False),
+        ("locked", "dashboard/e-gitee.lock.yml", None, None, True),
     ]
 
 
@@ -335,6 +338,7 @@ def test_summary_and_github_output(workspace, monkeypatch):
     assert "| `e-dashboard` | customer | PLANNED | floating | — |" in summary.read_text(encoding="utf-8")
     outputs = dict(line.split("=", 1) for line in gh_output.read_text(encoding="utf-8").splitlines())
     assert outputs["errors"] == "0"
+    assert outputs["jobs"] == "2"
     assert len(json.loads(outputs["matrix"])["include"]) == 2
 
 

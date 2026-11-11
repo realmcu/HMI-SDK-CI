@@ -31,6 +31,8 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      jobs: ${{ steps.plan.outputs.jobs }}
+      manifest_commit: ${{ steps.commit.outputs.sha }}
     steps:
       - name: Checkout CI repository
         uses: actions/checkout@v7
@@ -53,9 +55,12 @@ jobs:
         run: python scripts/plan.py --validate
 
       - name: Record manifest commit
+        id: commit
+        # Every build job checks out this exact commit, even if master moves mid-run.
         run: |
           commit="$(git -C manifest rev-parse HEAD)"
           echo "manifest commit: ${commit}"
+          echo "sha=${commit}" >> "${GITHUB_OUTPUT}"
           {
             echo "- CI commit: \`${GITHUB_SHA}\`"
             echo "- Manifest: \`realmcu/HMI-MANIFEST@${commit}\`"
@@ -81,5 +86,178 @@ jobs:
         with:
           name: plan-${{ github.run_id }}
           path: plan.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  build:
+    needs: plan
+    # Pull requests only exercise the plan; builds take minutes and pull requests
+    # from forks must not reach the build environment.
+    if: needs.plan.outputs.jobs != '0' && github.event_name != 'pull_request'
+    name: ${{ matrix.id }} (${{ matrix.track }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.timeout || 60 }}
+    strategy:
+      # One target or track breaking must not hide the others' results.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      WS: ${{ github.workspace }}/ws
+      REPORT_DIR: ${{ github.workspace }}/report
+      TOOLCHAIN_CACHE: ${{ github.workspace }}/toolchains
+    steps:
+      - name: Checkout CI repository
+        uses: actions/checkout@v7
+        with:
+          path: ci
+
+      - name: Checkout manifest repository
+        uses: actions/checkout@v7
+        with:
+          repository: realmcu/HMI-MANIFEST
+          ref: ${{ needs.plan.outputs.manifest_commit }}
+          path: ws/.manifest
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check -r ci/requirements.txt west==1.2.0
+
+      - name: Toolchain cache key
+        id: toolchain-key
+        env:
+          TOOLCHAIN: ${{ toJSON(matrix.toolchain) }}
+        run: |
+          echo "key=$(python ci/scripts/toolchain.py --toolchain "${TOOLCHAIN}" --cache-dir "${TOOLCHAIN_CACHE}" --cache-key)" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore toolchains
+        uses: actions/cache@v5
+        with:
+          path: toolchains
+          key: ${{ runner.os }}-${{ steps.toolchain-key.outputs.key }}
+
+      - name: Install toolchains
+        id: toolchain
+        timeout-minutes: 15
+        env:
+          TOOLCHAIN: ${{ toJSON(matrix.toolchain) }}
+        run: |
+          python ci/scripts/toolchain.py --toolchain "${TOOLCHAIN}" --cache-dir "${TOOLCHAIN_CACHE}" >> "${GITHUB_PATH}"
+
+      - name: Install build tools
+        timeout-minutes: 5
+        run: python -m pip install --disable-pip-version-check cmake ninja kconfiglib
+
+      - name: Fetch workspace
+        id: fetch
+        timeout-minutes: 45
+        env:
+          MANIFEST: ${{ matrix.manifest }}
+          FALLBACK: ${{ matrix.fallback_manifest }}
+          DERIVE: ${{ matrix.derive_fallback }}
+        run: |
+          args=(--workspace "${WS}" --manifest "${MANIFEST}" --report-dir "${REPORT_DIR}/fetch")
+          [ -n "${FALLBACK}" ] && args+=(--fallback "${FALLBACK}")
+          [ "${DERIVE}" = "true" ] && args+=(--derive-fallback)
+          python ci/scripts/fetch.py "${args[@]}"
+
+      - name: Record verified revisions
+        working-directory: ws
+        run: west manifest --freeze > "${REPORT_DIR}/manifest-revisions.yml"
+
+      # Written before the build so a failed build still says what moved.
+      - name: Report drift against locked manifest
+        if: matrix.lock_manifest
+        continue-on-error: true
+        env:
+          LOCK: ws/.manifest/${{ matrix.lock_manifest }}
+          FLOATING: ws/.manifest/${{ matrix.manifest }}
+        run: |
+          python ws/.manifest/scripts/bump_lock.py \
+            --lock "${LOCK}" \
+            --candidate "${REPORT_DIR}/manifest-revisions.yml" \
+            --floating "${FLOATING}" \
+            --repos "${WS}" \
+            --report "${REPORT_DIR}/drift.md"
+
+      - name: Build
+        id: build
+        env:
+          BUILDER: ${{ matrix.builder }}
+          BUILD: ${{ toJSON(matrix.build) }}
+          TOOLCHAIN: ${{ toJSON(matrix.toolchain) }}
+          ARTIFACTS: ${{ toJSON(matrix.artifacts) }}
+        run: |
+          python "ci/scripts/adapters/${BUILDER//-/_}.py" \
+            --workspace "${WS}" \
+            --manifest-dir "${WS}/.manifest" \
+            --build "${BUILD}" \
+            --toolchain "${TOOLCHAIN}" \
+            --artifacts "${ARTIFACTS}" \
+            --jobs "$(nproc)" \
+            --report-dir "${REPORT_DIR}/build"
+
+      # SPEC 5.3: the first failing stage decides the result.
+      - name: Classify result
+        if: always()
+        env:
+          TOOLCHAIN_OUTCOME: ${{ steps.toolchain.outcome }}
+          FETCH_OUTCOME: ${{ steps.fetch.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          build_result="$(python -c 'import json,sys; print(json.load(open(sys.argv[1])).get("result",""))' "${REPORT_DIR}/build/summary.json" 2>/dev/null || true)"
+          if [ "${TOOLCHAIN_OUTCOME}" != "success" ]; then
+            status=INFRA_FAIL
+          elif [ "${FETCH_OUTCOME}" != "success" ]; then
+            status="${FETCH_STATUS:-INFRA_FAIL}"
+          elif [ "${BUILD_OUTCOME}" = "success" ]; then
+            status=PASS
+          elif [ "${build_result}" = "FAIL" ]; then
+            status=BUILD_FAIL
+          else
+            status=INFRA_FAIL
+          fi
+          mkdir -p "${REPORT_DIR}"
+          python - "${status}" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          report = Path(os.environ["REPORT_DIR"])
+          result = {
+              "id": "${{ matrix.id }}",
+              "tier": "${{ matrix.tier }}",
+              "track": "${{ matrix.track }}",
+              "manifest": os.environ.get("FETCHED_MANIFEST") or "${{ matrix.manifest }}",
+              "used_fallback": os.environ.get("USED_FALLBACK") == "true",
+              "status": sys.argv[1],
+              "ci_commit": os.environ["GITHUB_SHA"],
+              "manifest_commit": "${{ needs.plan.outputs.manifest_commit }}",
+          }
+          (report / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+          PY
+          echo "::notice::${{ matrix.id }} (${{ matrix.track }}): ${status}"
+          {
+            echo "## \`${{ matrix.id }}\` (${{ matrix.track }}): ${status}"
+            echo
+            echo "Manifest: \`${FETCHED_MANIFEST:-${{ matrix.manifest }}}\`"
+            if [ "${USED_FALLBACK}" = "true" ]; then
+              echo
+              echo "_Fetched from the GitHub mirror after a gitee network failure; no lock promotion is produced from this run._"
+            fi
+            echo
+            [ -f "${REPORT_DIR}/build/summary.md" ] && cat "${REPORT_DIR}/build/summary.md"
+            if [ -f "${REPORT_DIR}/drift.md" ]; then
+              echo
+              echo "<details><summary>Drift against locked manifest</summary>"
+              echo
+              cat "${REPORT_DIR}/drift.md"
+              echo
+              echo "</details>"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: report-${{ matrix.id }}-${{ matrix.track }}-${{ github.run_id }}
+          path: report/
           if-no-files-found: warn
           retention-days: 30

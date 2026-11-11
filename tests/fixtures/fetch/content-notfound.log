@@ -1,0 +1,7 @@
+=== updating x (x):
+--- x: initializing
+Initialized empty Git repository in /tmp/west-err/notfound/x/.git/
+--- x: fetching, need revision master
+remote: [session-6e4e0d9c] 404 not found!
+fatal: repository 'https://gitee.com/realmcu/no-such-repo-zz/' not found
+ERROR: update failed for project x

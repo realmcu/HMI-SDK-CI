@@ -1,0 +1,7 @@
+=== updating x (x):
+--- x: initializing
+Initialized empty Git repository in /tmp/west-err/private/x/.git/
+--- x: fetching, need revision master
+remote: Repository not found.
+fatal: repository 'https://github.com/ShelDeng1/mi-ebadge/' not found
+ERROR: update failed for project x

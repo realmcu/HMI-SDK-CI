@@ -1,0 +1,45 @@
+--- Creating /home/runner/work/HMI-MANIFEST/HMI-MANIFEST/.west and local configuration file
+=== updating rtl87x3ep-hmi-sdk (sdk):
+--- rtl87x3ep-hmi-sdk: initializing
+--- rtl87x3ep-hmi-sdk: fetching, need revision master
+error: RPC failed; curl 56 GnuTLS recv error (-110): The TLS connection was non-properly terminated.
+error: 6965 bytes of body are still expected
+fatal: early EOF
+fatal: fetch-pack: invalid index-pack output
+=== updating hmi-dashboard (sdk/board/evb/hmi_dashboard):
+--- hmi-dashboard: initializing
+--- hmi-dashboard: fetching, need revision rtl8773e-dashboard
+=== updating wearable (sdk/src/app/Wearable):
+--- wearable: initializing
+--- wearable: fetching, need revision master
+=== updating HoneyGUI (sdk/src/sample/gui):
+--- HoneyGUI: initializing
+--- HoneyGUI: fetching, need revision master
+fatal: unable to access 'https://gitee.com/realmcu/HoneyGUI/': Recv failure: Connection reset by peer
+=== updating display (sdk/src/mcu/display):
+--- display: initializing
+--- display: fetching, need revision master
+fatal: unable to access 'https://gitee.com/realmcu/display/': Recv failure: Connection reset by peer
+=== updating ui (sdk/board/evb/hmi_dashboard/src/application/designer):
+--- ui: initializing
+--- ui: fetching, need revision dev_lite
+ERROR: update failed for projects: rtl87x3ep-hmi-sdk, HoneyGUI, display
+=== updating rtl87x3ep-hmi-sdk (sdk):
+--- rtl87x3ep-hmi-sdk: fetching, need revision master
+error: RPC failed; curl 56 GnuTLS recv error (-110): The TLS connection was non-properly terminated.
+error: 5857 bytes of body are still expected
+fatal: early EOF
+fatal: fetch-pack: invalid index-pack output
+=== updating hmi-dashboard (sdk/board/evb/hmi_dashboard):
+--- hmi-dashboard: fetching, need revision rtl8773e-dashboard
+=== updating wearable (sdk/src/app/Wearable):
+--- wearable: fetching, need revision master
+=== updating HoneyGUI (sdk/src/sample/gui):
+--- HoneyGUI: fetching, need revision master
+=== updating display (sdk/src/mcu/display):
+--- display: fetching, need revision master
+=== updating ui (sdk/board/evb/hmi_dashboard/src/application/designer):
+--- ui: fetching, need revision dev_lite
+ERROR: update failed for project rtl87x3ep-hmi-sdk
+=== updating rtl87x3ep-hmi-sdk (sdk):
+--- rtl87x3ep-hmi-sdk: fetching, need revision master
