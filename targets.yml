@@ -1,0 +1,19 @@
+# SDK targets verified by this CI. Manifest paths are relative to the root of
+# realmcu/HMI-MANIFEST. Field reference: README.md.
+schema_version: 1
+
+targets:
+  - id: rtl8773e-dashboard
+    tier: customer
+    manifest: dashboard/rtl8773e-dashboard-gitee.yml
+    fallback_manifest: dashboard/rtl8773e-dashboard-github.yml
+    lock_manifest: dashboard/rtl8773e-dashboard-gitee.lock.yml
+    version_model: floating
+    builder: hmi-west
+    build:
+      profile: full
+    toolchain:
+      # Version recommended by the SDK's gcc/README.md.
+      arm-gnu: 12.3.rel1
+    triggers: [nightly]
+    timeout: 60

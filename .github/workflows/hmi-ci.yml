@@ -1,0 +1,58 @@
+name: HMI SDK CI
+
+on:
+  schedule:
+    # Off the top of the hour: GitHub delays schedules at peak times by hours.
+    - cron: "17 15 * * *"
+  workflow_dispatch:
+    inputs:
+      manifest_ref:
+        description: Branch, tag or SHA of realmcu/HMI-MANIFEST to verify
+        required: false
+        default: master
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hmi-ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout CI repository
+        uses: actions/checkout@v7
+
+      - name: Checkout manifest repository
+        uses: actions/checkout@v7
+        with:
+          repository: realmcu/HMI-MANIFEST
+          ref: ${{ inputs.manifest_ref || 'master' }}
+          path: manifest
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Run tests
+        # Limit collection to tests/ so nothing inside the manifest checkout is picked up.
+        run: python -m pytest -q tests
+
+      - name: Validate targets.yml
+        run: python scripts/plan.py --validate
+
+      - name: Record manifest commit
+        run: |
+          commit="$(git -C manifest rev-parse HEAD)"
+          echo "manifest commit: ${commit}"
+          {
+            echo "## Plan"
+            echo
+            echo "- CI commit: \`${GITHUB_SHA}\`"
+            echo "- Manifest: \`realmcu/HMI-MANIFEST@${commit}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
