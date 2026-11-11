@@ -64,7 +64,8 @@ def load_previous(path: Path | None) -> dict[str, dict]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("schema_version") != SCHEMA_VERSION:
         return {}
-    return {entry["key"]: entry for entry in data.get("entries", [])}
+    entries = data.get("carried", []) + data.get("entries", [])
+    return {entry["key"]: entry for entry in entries}
 
 
 def aggregate(plan: dict, results: list[dict], previous: dict[str, dict], run: dict) -> dict:
@@ -102,7 +103,13 @@ def aggregate(plan: dict, results: list[dict], previous: dict[str, dict], run: d
                     "plan_errors": target.get("errors", []),
                 }
             )
-    return {"schema_version": SCHEMA_VERSION, "run": run, "entries": entries}
+    # A run limited to some targets (a manifest-change dispatch) must not erase
+    # the others' history, or their next run would look like a first run.
+    seen = {e["key"] for e in entries}
+    carried = [
+        {**entry, "change": "not-run"} for key, entry in previous.items() if key not in seen
+    ]
+    return {"schema_version": SCHEMA_VERSION, "run": run, "entries": entries, "carried": carried}
 
 
 def summary_markdown(report: dict) -> str:

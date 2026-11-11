@@ -112,6 +112,17 @@ def test_main_round_trip(tmp_path):
     assert "Compared with run 41." in summary.read_text(encoding="utf-8")
 
 
+def test_partial_run_carries_other_targets_forward(tmp_path):
+    previous = {"other/main": {"key": "other/main", "id": "other", "status": "BUILD_FAIL", "failing": True, "streak": 3}}
+    report = aggregate.aggregate(plan(tracks=("floating",)), results(floating="PASS"), previous, {})
+    assert [e["key"] for e in report["carried"]] == ["other/main"]
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    loaded = aggregate.load_previous(path)
+    assert loaded["other/main"]["streak"] == 3
+    assert aggregate.classify("BUILD_FAIL", loaded["other/main"]).change == "still-failing"
+
+
 @pytest.mark.parametrize("content", [None, {"schema_version": 99, "entries": []}])
 def test_unusable_previous_is_ignored(tmp_path, content):
     path = tmp_path / "prev.json"
