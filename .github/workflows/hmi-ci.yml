@@ -10,6 +10,10 @@ on:
         description: Branch, tag or SHA of realmcu/HMI-MANIFEST to verify
         required: false
         default: master
+      targets:
+        description: Comma-separated target ids (empty runs every enabled target)
+        required: false
+        default: ""
   push:
     branches: [main]
   pull_request:
@@ -25,6 +29,8 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - name: Checkout CI repository
         uses: actions/checkout@v7
@@ -51,8 +57,29 @@ jobs:
           commit="$(git -C manifest rev-parse HEAD)"
           echo "manifest commit: ${commit}"
           {
-            echo "## Plan"
-            echo
             echo "- CI commit: \`${GITHUB_SHA}\`"
             echo "- Manifest: \`realmcu/HMI-MANIFEST@${commit}\`"
+            echo
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Plan
+        id: plan
+        env:
+          EVENT: ${{ github.event_name == 'schedule' && 'nightly' || 'manual' }}
+          ONLY: ${{ inputs.targets }}
+        run: |
+          python scripts/plan.py \
+            --manifest-root manifest \
+            --event "${EVENT}" \
+            ${ONLY:+--only "${ONLY}"} \
+            --output plan.json \
+            --summary "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload plan
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: plan-${{ github.run_id }}
+          path: plan.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -56,10 +56,32 @@ Unknown fields and duplicate keys are errors, so a misspelt field cannot be sile
 | --- | --- |
 | `hmi-west` | `profile`: `quick` (bank 0 only) or `full` (all four modes) |
 
+## Plan
+
+`scripts/plan.py` selects the targets for a run and checks each one against the manifest repository
+before anything is fetched:
+
+| Check | Result |
+| --- | --- |
+| A manifest named in `targets.yml` does not exist | `INFRA_FAIL`: `targets.yml` is out of date; the target is not built |
+| The primary manifest is not a valid west manifest | `MANIFEST_FAIL`; the target is not built |
+| `version_model` differs from the one derived from the manifest | Error in the plan report; the target is still built |
+| `manifest` and `fallback_manifest` differ in anything other than URLs | Error in the plan report; the target is still built |
+| `lock_manifest` has a project not pinned to a SHA | Error in the plan report; the target is still built |
+
+The version model is derived from each project's `revision`: a full SHA or a tag is pinned, a branch
+floats. Branches and tags are told apart with anonymous `git ls-remote`; if a remote cannot be
+reached the model is not checked and a warning is reported instead.
+
+A target with a `lock_manifest` gets two build jobs, `floating` and `locked`; any other target gets
+one, `main`.
+
 ## Local checks
 
 ```sh
 python -m pip install -r requirements.txt
-python -m pytest -q
+python -m pytest -q tests
 python scripts/plan.py --validate
+git clone https://github.com/realmcu/HMI-MANIFEST manifest
+python scripts/plan.py --manifest-root manifest --summary plan.md
 ```

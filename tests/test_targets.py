@@ -192,3 +192,4 @@ def test_plan_validate_exit_codes(tmp_path, capsys):
     bad.write_text("schema_version: 1\ntargets:\n  - id: x\n", encoding="utf-8")
     assert plan.main(["--validate", "--targets", str(bad)]) == 1
     assert ".tier: missing required field" in capsys.readouterr().err
+    assert plan.main(["--targets", str(bad), "--manifest-root", str(tmp_path)]) == 1
