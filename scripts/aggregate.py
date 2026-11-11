@@ -1,7 +1,8 @@
 """Combine the per-job results of a run and compare them with the previous run.
 
 Reads every result.json under --reports, plus the plan report, and writes
-results.json (the input of the next run's comparison and of notify.py) and a
+results.json (the input of the next run's comparison, notify.py and the weekly
+summary) and a
 Markdown summary. "Previous" means the previous recorded run, not the previous
 calendar day: scheduled runs are sometimes delayed by hours or skipped.
 """
@@ -87,7 +88,18 @@ def aggregate(plan: dict, results: list[dict], previous: dict[str, dict], run: d
                 status = "INFRA_FAIL"
             else:
                 status = result["status"]
-            state = classify(status, previous.get(key))
+            prev = previous.get(key)
+            state = classify(status, prev)
+            prev_failure = None
+            if prev and prev.get("failing"):
+                prev_failure = prev.get("failure_status") or prev.get("status")
+            # The failure a streak is about; FETCH_FAIL inside a streak does not replace it.
+            if not state.failing:
+                failure_status = None
+            elif status in UNVERIFIED:
+                failure_status = prev_failure
+            else:
+                failure_status = status
             entries.append(
                 {
                     "key": key,
@@ -99,6 +111,9 @@ def aggregate(plan: dict, results: list[dict], previous: dict[str, dict], run: d
                     "streak": state.streak,
                     "failing": state.failing,
                     "unverified": state.unverified,
+                    "failure_status": failure_status,
+                    "previous_failure_status": prev_failure,
+                    "previous_unverified": prev.get("unverified", 0) if prev else 0,
                     "used_fallback": bool(result and result.get("used_fallback")),
                     "plan_errors": target.get("errors", []),
                 }

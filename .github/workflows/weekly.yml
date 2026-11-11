@@ -1,0 +1,57 @@
+name: Weekly summary
+
+on:
+  schedule:
+    # Thursday 01:23 UTC (09:23 in China), after Wednesday's nightly has finished.
+    - cron: "23 1 * * 4"
+  workflow_dispatch:
+    inputs:
+      notify_to:
+        description: Send the summary only to these addresses (empty uses targets.yml)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  weekly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout CI repository
+        uses: actions/checkout@v7
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Download the week's results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          since="$(date -u -d '8 days ago' +%Y-%m-%d)"
+          gh run list -R "${GITHUB_REPOSITORY}" --workflow hmi-ci.yml --limit 100 \
+            --json databaseId,event,createdAt,status \
+            --jq "[.[] | select(.status == \"completed\" and (.event == \"schedule\" or .event == \"workflow_dispatch\") and .createdAt >= \"${since}\")]" \
+            > runs.json
+          mkdir -p results
+          # A run that died before aggregating has no results artifact; the summary reports it as missing.
+          for id in $(jq -r '.[].databaseId' runs.json); do
+            gh run download "${id}" -R "${GITHUB_REPOSITORY}" -n "results-${id}" -D "results/results-${id}" \
+              || echo "no results artifact for run ${id}"
+          done
+
+      - name: Mail
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          NOTIFY_TO: ${{ inputs.notify_to }}
+        run: |
+          python scripts/notify.py weekly \
+            --runs runs.json \
+            --results-dir results \
+            --today "$(date -u +%Y-%m-%d)" \
+            --runs-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/workflows/hmi-ci.yml" \
+            --summary "${GITHUB_STEP_SUMMARY}" \
+            ${NOTIFY_TO:+--to "${NOTIFY_TO}"}

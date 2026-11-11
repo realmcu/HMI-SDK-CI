@@ -23,8 +23,11 @@ ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 TOOL_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 MANIFEST_PATTERN = re.compile(r"^[A-Za-z0-9._/-]+$")
 ARTIFACT_PATTERN = re.compile(r"^[A-Za-z0-9._/*?\[\]-]+$")
+EMAIL_PATTERN = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$")
 
 TOP_LEVEL_FIELDS = ("schema_version", "targets")
+TOP_LEVEL_OPTIONAL = ("notify",)
+NOTIFY_FIELDS = ("ci_maintainers", "watchers")
 REQUIRED_FIELDS = (
     "id",
     "tier",
@@ -61,6 +64,14 @@ class Target:
     artifacts: tuple[str, ...] = ()
     owners: tuple[str, ...] = ()
     timeout: int | None = None
+
+
+@dataclass(frozen=True)
+class Notify:
+    """Fixed mail recipients besides each target's owners."""
+
+    ci_maintainers: tuple[str, ...] = ()  # every mail; the only ones told about INFRA_FAIL
+    watchers: tuple[str, ...] = ()  # every SDK mail and the weekly summary
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -143,6 +154,31 @@ def _check_str_list(
     if choices is not None:
         for item in value:
             _check_choice(item, choices, where, errors)
+
+
+def _check_emails(value: Any, where: str, errors: list[str]) -> None:
+    before = len(errors)
+    _check_str_list(value, where, errors, non_empty=False)
+    if len(errors) == before:
+        for item in value:
+            if not EMAIL_PATTERN.match(item) or item != item.lower():
+                errors.append(f"{where}: must be lowercase email addresses (got {item!r})")
+
+
+def _parse_notify(data: dict[str, Any], errors: list[str]) -> Notify:
+    raw = data.get("notify", {})
+    if not isinstance(raw, dict):
+        errors.append("notify: must be a mapping")
+        return Notify()
+    _check_keys(raw, "notify", (), NOTIFY_FIELDS, errors)
+    lists = {}
+    for name in NOTIFY_FIELDS:
+        if name in raw:
+            before = len(errors)
+            _check_emails(raw[name], f"notify.{name}", errors)
+            if len(errors) == before:
+                lists[name] = tuple(raw[name])
+    return Notify(**lists)
 
 
 def _check_toolchain(value: Any, where: str, errors: list[str]) -> None:
@@ -244,7 +280,7 @@ def _validate_target(raw: Any, index: int, errors: list[str]) -> Target | None:
                 if isinstance(item, str) and item:
                     _check_relative_path(item, ARTIFACT_PATTERN, f"{where}.artifacts[{i}]", errors)
     if "owners" in raw:
-        _check_str_list(raw["owners"], f"{where}.owners", errors, non_empty=False)
+        _check_emails(raw["owners"], f"{where}.owners", errors)
     if "timeout" in raw:
         timeout = raw["timeout"]
         # bool is a subclass of int, so `timeout: true` would otherwise pass as 1.
@@ -291,7 +327,8 @@ def parse_targets(data: Any) -> list[Target]:
         raise ConfigError(["top level: must be a mapping"])
 
     errors: list[str] = []
-    _check_keys(data, "", TOP_LEVEL_FIELDS, (), errors)
+    _check_keys(data, "", TOP_LEVEL_FIELDS, TOP_LEVEL_OPTIONAL, errors)
+    _parse_notify(data, errors)
     version = data.get("schema_version")
     if "schema_version" in data and (isinstance(version, bool) or version != SCHEMA_VERSION):
         errors.append(f"schema_version: must be {SCHEMA_VERSION} (got {version!r})")
@@ -316,12 +353,16 @@ def parse_targets(data: Any) -> list[Target]:
     return targets
 
 
-def load_targets(path: Path) -> list[Target]:
-    """Read and validate a targets.yml file.
+def parse_notify(data: Any) -> Notify:
+    """The ``notify`` table of already-validated targets.yml content."""
+    errors: list[str] = []
+    notify = _parse_notify(data if isinstance(data, dict) else {}, errors)
+    if errors:
+        raise ConfigError(errors)
+    return notify
 
-    Raises:
-        ConfigError: the file cannot be read, is not valid YAML, or violates the schema.
-    """
+
+def _read(path: Path) -> Any:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -330,4 +371,24 @@ def load_targets(path: Path) -> list[Target]:
         data = yaml.load(text, Loader=_UniqueKeyLoader)
     except yaml.YAMLError as exc:
         raise ConfigError([f"invalid YAML: {exc}"]) from exc
-    return parse_targets(data)
+    return data
+
+
+def load_targets(path: Path) -> list[Target]:
+    """Read and validate a targets.yml file.
+
+    Raises:
+        ConfigError: the file cannot be read, is not valid YAML, or violates the schema.
+    """
+    return parse_targets(_read(path))
+
+
+def load_notify(path: Path) -> Notify:
+    """Read targets.yml and return its validated ``notify`` table.
+
+    Raises:
+        ConfigError: as for load_targets().
+    """
+    data = _read(path)
+    parse_targets(data)
+    return parse_notify(data)

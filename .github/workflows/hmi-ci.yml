@@ -14,6 +14,10 @@ on:
         description: Comma-separated target ids (empty runs every enabled target)
         required: false
         default: ""
+      notify_to:
+        description: Send this run's mail only to these addresses (empty uses targets.yml)
+        required: false
+        default: ""
   push:
     branches: [main]
   pull_request:
@@ -301,6 +305,7 @@ jobs:
           echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
 
       - name: Aggregate
+        id: aggregate
         env:
           PREVIOUS_RUN: ${{ steps.previous.outputs.run_id }}
         run: |
@@ -324,3 +329,13 @@ jobs:
           path: results/results.json
           if-no-files-found: error
           retention-days: 90
+
+      # SMTP secrets reach only recorded runs; pull requests and pushes never mail.
+      - name: Mail
+        if: steps.aggregate.outcome == 'success' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          NOTIFY_TO: ${{ inputs.notify_to }}
+        run: |
+          python scripts/notify.py run             --results results/results.json             --reports artifacts             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"             --summary "${GITHUB_STEP_SUMMARY}"             ${NOTIFY_TO:+--to "${NOTIFY_TO}"}

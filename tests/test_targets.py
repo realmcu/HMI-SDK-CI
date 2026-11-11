@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import plan  # noqa: E402
-from targets import ConfigError, load_targets, parse_targets  # noqa: E402
+from targets import ConfigError, Notify, load_notify, load_targets, parse_notify, parse_targets  # noqa: E402
 
 VALID_TARGET = {
     "id": "rtl8773e-dashboard",
@@ -52,6 +52,17 @@ def test_repository_targets_file_is_valid():
     assert [t.id for t in targets] == ["rtl8773e-dashboard"]
 
 
+def test_repository_notify_table_is_valid():
+    notify = load_notify(REPO_ROOT / "targets.yml")
+    assert notify.ci_maintainers and notify.watchers
+
+
+def test_notify_is_optional():
+    assert parse_notify(config()) == Notify()
+    data = {**config(), "notify": {"ci_maintainers": ["ci@example.com"]}}
+    assert parse_notify(data) == Notify(ci_maintainers=("ci@example.com",))
+
+
 def test_valid_target_round_trips():
     (parsed,) = parse_targets(config())
     assert parsed.lock_manifest == "dashboard/rtl8773e-dashboard-gitee.lock.yml"
@@ -82,6 +93,12 @@ def test_minimal_pinned_preview_target():
         ({"schema_version": True, "targets": [VALID_TARGET]}, "schema_version: must be 1"),
         ({"schema_version": 1, "targets": []}, "targets: must be a non-empty list"),
         ({"schema_version": 1, "targets": [VALID_TARGET], "extra": 1}, "extra: unknown field"),
+        ({"schema_version": 1, "targets": [VALID_TARGET], "notify": []}, "notify: must be a mapping"),
+        ({"schema_version": 1, "targets": [VALID_TARGET], "notify": {"cc": []}}, "notify.cc: unknown field"),
+        (
+            {"schema_version": 1, "targets": [VALID_TARGET], "notify": {"watchers": ["howie_wang"]}},
+            "notify.watchers: must be lowercase email addresses",
+        ),
     ],
 )
 def test_top_level_errors(data, expected):
@@ -115,6 +132,8 @@ def test_top_level_errors(data, expected):
         ({"triggers": ["nightly", "nightly"]}, ".triggers: duplicate entry"),
         ({"artifacts": ["../escape.bin"]}, ".artifacts[0]: must be a relative path"),
         ({"owners": "a@b"}, ".owners: must be a list"),
+        ({"owners": ["a@b"]}, ".owners: must be lowercase email addresses"),
+        ({"owners": ["Luke_Sun@realsil.com.cn"]}, ".owners: must be lowercase email addresses"),
         ({"timeout": 0}, ".timeout: must be whole minutes"),
         ({"timeout": 361}, ".timeout: must be whole minutes"),
         ({"timeout": True}, ".timeout: must be whole minutes"),

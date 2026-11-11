@@ -20,6 +20,7 @@ and never pushes to any product repository.
 | `tests/` | Tests for `scripts/` |
 | `.github/workflows/hmi-ci.yml` | Plan, build and aggregate |
 | `.github/workflows/poll.yml` | Manifest change polling |
+| `.github/workflows/weekly.yml` | Thursday summary mail |
 
 ## `targets.yml`
 
@@ -32,7 +33,8 @@ targets:
     # ...
 ```
 
-Manifest paths are relative to the root of the manifest repository.
+Manifest paths are relative to the root of the manifest repository. The optional top-level `notify`
+table lists fixed mail recipients (see [Mail](#mail)).
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -47,7 +49,7 @@ Manifest paths are relative to the root of the manifest repository.
 | `toolchain` | yes | Tool name to version, for example `arm-gnu: 12.3.rel1`. The version actually used is written to the report. |
 | `triggers` | yes | Non-empty list of `nightly` and/or `on-change`. |
 | `artifacts` | no | Relative paths or globs that must exist and be non-empty after the build. |
-| `owners` | no | Extra mail recipients for this target. |
+| `owners` | no | Email addresses of the people responsible for this SDK; they get this target's mail. |
 | `timeout` | no | Job time limit in minutes, 1 to 360. Defaults to the adapter's limit. |
 
 Unknown fields and duplicate keys are errors, so a misspelt field cannot be silently ignored.
@@ -109,6 +111,32 @@ recorded) and labels it *new failure*, *still failing (N runs)*, *recovered* or 
 `FETCH_FAIL` neither starts nor ends a failure streak. Counts are per run, not per calendar day,
 because scheduled runs are sometimes delayed by hours or skipped. The comparison input is the
 `results-<run id>` artifact, kept for 90 days.
+
+## Mail
+
+`scripts/notify.py` mails after every scheduled or dispatched run, and `weekly.yml` sends a summary
+every Thursday. Push and pull-request runs never mail.
+
+| Event | Mailed |
+| --- | --- |
+| A `customer` target/track fails after passing, or fails in a different way | once, when it happens |
+| It passes again | once |
+| It keeps failing the same way | not again; it appears in the weekly summary |
+| `FETCH_FAIL` | on the second run in a row, and when fetching works again |
+| `preview` targets | never; Job Summary only |
+| Thursday | weekly summary: every target's state, pass counts, and the nights with no results |
+
+A failing `locked` track is marked ⚠ and listed first. A run's mail holds every change of that run.
+
+| Recipients | Get |
+| --- | --- |
+| `notify.ci_maintainers` | everything, and are the only ones told about `INFRA_FAIL` |
+| `notify.watchers` | everything except `INFRA_FAIL`, and the weekly summary |
+| a target's `owners` | that target's mail, and the weekly summary |
+
+Mail is sent through SMTP over TLS with the repository secrets `SMTP_USER` and `SMTP_PASSWORD`;
+the server is `smtp.<domain of SMTP_USER>`. The `notify_to` input of a manual run sends that
+run's mail only to the addresses given, for testing.
 
 ## Manifest change polling
 

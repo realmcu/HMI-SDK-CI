@@ -2,6 +2,11 @@
 # realmcu/HMI-MANIFEST. Field reference: README.md.
 schema_version: 1
 
+# Mail recipients. Each target's `owners` are added for that target only.
+notify:
+  ci_maintainers: [luke_sun@realsil.com.cn]
+  watchers: [howie_wang@realsil.com.cn]
+
 targets:
   - id: rtl8773e-dashboard
     tier: customer
