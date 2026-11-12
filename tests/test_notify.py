@@ -8,8 +8,6 @@ from datetime import date
 from email import policy
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
@@ -279,24 +277,63 @@ class FakeSMTP:
         FakeSMTP.sent.append(msg["Subject"])
 
 
-def send_with_fake(password, failures=0, auth_failures=0):
+def send_with_fake(password, failures=0, auth_failures=0, pauses=None):
     msg = notify.build_message("ci-bot@163.com", [CI], "s", [("p", "x")])
     FakeSMTP.sent, FakeSMTP.logins = [], 0
     FakeSMTP.failures, FakeSMTP.auth_failures = failures, auth_failures
-    notify.send(notify.Smtp("ci-bot@163.com", password, "smtp.163.com"), [msg], connect=FakeSMTP, sleep=lambda s: None)
+    sleep = (pauses.append if pauses is not None else lambda s: None)
+    return notify.send(notify.Smtp("ci-bot@163.com", password, "smtp.163.com"), [msg], connect=FakeSMTP, sleep=sleep)
 
 
 def test_send_retries_network_errors_and_sporadic_auth_rejections():
-    send_with_fake("right", failures=1)
+    assert send_with_fake("right", failures=1) == []
     assert FakeSMTP.sent == ["s"]
-    send_with_fake("right", auth_failures=1)
-    assert FakeSMTP.sent == ["s"]
+    pauses = []
+    assert send_with_fake("right", auth_failures=3, pauses=pauses) == []
+    assert FakeSMTP.sent == ["s"] and pauses == [30, 60, 120]
 
 
 def test_send_gives_up_on_bad_credentials():
-    with pytest.raises(smtplib.SMTPAuthenticationError):
-        send_with_fake("wrong")
+    ((msg, exc),) = send_with_fake("wrong")
+    assert isinstance(exc, smtplib.SMTPAuthenticationError) and msg["Subject"] == "s"
     assert FakeSMTP.logins == notify.SEND_ATTEMPTS and FakeSMTP.sent == []
+
+
+def test_smtp_errors_are_logged_without_addresses():
+    exc = smtplib.SMTPRecipientsRefused({CI: (550, b"5.1.1 <lead@example.com> unknown")})
+    text = notify.describe(exc)
+    assert text.startswith("SMTPRecipientsRefused: ") and "<address>" in text
+    assert "@" not in text
+    assert notify.describe(smtplib.SMTPAuthenticationError(535, b"Error: authentication failed")) == (
+        "SMTPAuthenticationError: (535, b'Error: authentication failed')"
+    )
+
+
+def test_undelivered_mail_is_described_without_addresses(tmp_path, capsys):
+    entry = {"key": "dash/floating", "id": "dash", "tier": "customer", "track": "floating",
+             "status": "BUILD_FAIL", "change": "new-failure"}
+    undelivered = tmp_path / "undelivered.md"
+    assert notify.main([
+        "run", "--results", str(results_file(tmp_path, [entry])), "--targets", str(targets_file(tmp_path)),
+        "--run-url", "https://example.com/run/7", "--undelivered", str(undelivered),
+    ], env={}) == 1
+    text = undelivered.read_text(encoding="utf-8")
+    assert "new failure: dash (floating) (3 recipient(s))" in text and "https://example.com/run/7" in text
+    assert CI not in text and DASH_OWNER not in text
+
+
+def test_delivered_mail_leaves_no_undelivered_file(tmp_path, monkeypatch):
+    real_send = notify.send
+    monkeypatch.setattr(notify, "send", lambda smtp, messages: real_send(smtp, messages, connect=FakeSMTP))
+    FakeSMTP.failures = FakeSMTP.auth_failures = 0
+    entry = {"key": "dash/floating", "id": "dash", "tier": "customer", "track": "floating",
+             "status": "BUILD_FAIL", "change": "new-failure"}
+    undelivered = tmp_path / "undelivered.md"
+    assert notify.main([
+        "run", "--results", str(results_file(tmp_path, [entry])), "--targets", str(targets_file(tmp_path)),
+        "--run-url", "u", "--undelivered", str(undelivered),
+    ], env={"SMTP_USER": "ci-bot@163.com", "SMTP_PASSWORD": "right"}) == 0
+    assert not undelivered.exists()
 
 
 def test_smtp_host_defaults_to_sender_domain():

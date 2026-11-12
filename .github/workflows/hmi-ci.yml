@@ -276,10 +276,12 @@ jobs:
     # Runs when builds fail or are skipped too; a missing job result is itself a finding.
     if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # Mail retries can take 7.5 minutes per message.
+    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
+      issues: write
     steps:
       - name: Checkout CI repository
         uses: actions/checkout@v7
@@ -338,4 +340,17 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           NOTIFY_TO: ${{ inputs.notify_to }}
         run: |
-          python scripts/notify.py run             --results results/results.json             --reports artifacts             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"             --summary "${GITHUB_STEP_SUMMARY}"             ${NOTIFY_TO:+--to "${NOTIFY_TO}"}
+          python scripts/notify.py run \
+            --results results/results.json \
+            --reports artifacts \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --summary "${GITHUB_STEP_SUMMARY}" \
+            --undelivered undelivered.md \
+            ${NOTIFY_TO:+--to "${NOTIFY_TO}"}
+
+      # GitHub mails the repository's watchers about the issue without going through SMTP.
+      - name: Report undelivered mail
+        if: failure() && hashFiles('undelivered.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/report_undelivered.sh undelivered.md

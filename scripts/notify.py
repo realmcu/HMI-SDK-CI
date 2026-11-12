@@ -42,9 +42,11 @@ EXCERPT_LINES = 20
 DRIFT_LINES = 40
 WEEK_DAYS = 7
 EMAIL_PATTERN = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$")
+ADDRESS_IN_TEXT = re.compile(r"[^\s<>()'\",;:]+@[^\s<>()'\",;:]+")
 SMTP_PORT = 465
 SMTP_TIMEOUT = 60
-SEND_ATTEMPTS = 3
+SEND_ATTEMPTS = 5
+RETRY_PAUSE = 30  # seconds before the first retry, doubled after each one: 7.5 minutes in all
 SENDER_NAME = "HMI SDK CI"
 
 LABELS = {
@@ -445,12 +447,19 @@ def smtp_from_env(env: dict[str, str]) -> Smtp | None:
     return Smtp(user, password, host)
 
 
+def describe(exc: Exception) -> str:
+    """The error for public logs and issues: SMTP replies may quote recipient addresses."""
+    return f"{type(exc).__name__}: {ADDRESS_IN_TEXT.sub('<address>', str(exc))}"
+
+
 def send(
     smtp: Smtp,
     messages: list[EmailMessage],
     connect: Callable[..., smtplib.SMTP] = smtplib.SMTP_SSL,
     sleep: Callable[[float], None] = time.sleep,
-) -> None:
+) -> list[tuple[EmailMessage, Exception]]:
+    """Send each message, retrying with growing pauses; return the ones that failed."""
+    failed = []
     for msg in messages:
         for attempt in range(1, SEND_ATTEMPTS + 1):
             try:
@@ -458,16 +467,37 @@ def send(
                     server.login(smtp.user, smtp.password)
                     server.send_message(msg)
                 break
-            # 163 also answers a valid login with 535 now and then, so 535 is retried too.
+            # 163 rejects many logins from runner IPs with 535 although the
+            # password is right, so 535 is retried like a network error.
             except (smtplib.SMTPException, OSError) as exc:
                 if attempt == SEND_ATTEMPTS:
-                    raise
-                print(f"::warning::sending failed ({type(exc).__name__}: {exc}), retrying", file=sys.stderr)
-                sleep(30)
+                    failed.append((msg, exc))
+                    break
+                pause = RETRY_PAUSE * 2 ** (attempt - 1)
+                print(f"::warning::sending failed ({describe(exc)}), retrying in {pause}s", file=sys.stderr)
+                sleep(pause)
+    return failed
+
+
+def write_undelivered(path: Path | None, reason: str, messages: list[EmailMessage], link: str) -> None:
+    """Describe mail that could not be sent, as the body of a fallback GitHub issue.
+
+    The issue is public: subjects and counts only, never addresses or log excerpts.
+    """
+    if path is None:
+        return
+    lines = [f"CI mail could not be sent: {reason}", "", "Not delivered:", ""]
+    lines += [f"- {msg['Subject']} ({len(msg['To'].addresses)} recipient(s))" for msg in messages]
+    lines += ["", f"Details: {link}"]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def deliver(
-    groups: list[tuple[list[str], str, list[Block]]], outbox: Path | None, env: dict[str, str]
+    groups: list[tuple[list[str], str, list[Block]]],
+    outbox: Path | None,
+    env: dict[str, str],
+    undelivered: Path | None = None,
+    link: str = "",
 ) -> int:
     smtp = smtp_from_env(env)
     sender = smtp.user if smtp else "hmi-sdk-ci@example.invalid"
@@ -482,13 +512,16 @@ def deliver(
         return 0
     if smtp is None:
         print(f"::error::SMTP_USER / SMTP_PASSWORD are not set; {len(messages)} message(s) not sent", file=sys.stderr)
+        write_undelivered(undelivered, "SMTP_USER / SMTP_PASSWORD are not set", messages, link)
         return 1
-    try:
-        send(smtp, messages)
-    except (smtplib.SMTPException, OSError) as exc:
-        print(f"::error::cannot send mail via {smtp.host}: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
-    return 0
+    failed = send(smtp, messages)
+    if not failed:
+        return 0
+    for msg, exc in failed:
+        print(f"::error::cannot send mail via {smtp.host}: {describe(exc)}", file=sys.stderr)
+    reason = f"{smtp.host} answered {describe(failed[-1][1])}"
+    write_undelivered(undelivered, reason, [msg for msg, _ in failed], link)
+    return 1
 
 
 def append_summary(path: Path | None, lines: list[str]) -> None:
@@ -522,7 +555,7 @@ def cmd_run(args: argparse.Namespace, env: dict[str, str]) -> int:
         args.summary,
         ["", "## Mail", ""] + [f"- {subject} ({len(to)} recipient(s))" for to, subject, _ in messages],
     )
-    status = deliver(messages, args.outbox, env)
+    status = deliver(messages, args.outbox, env, args.undelivered, args.run_url)
     for event in orphans:
         print(f"::error::nobody to mail about {event.entry['key']}; fill notify in targets.yml", file=sys.stderr)
     return 1 if orphans else status
@@ -547,7 +580,7 @@ def cmd_weekly(args: argparse.Namespace, env: dict[str, str]) -> int:
         print("::error::nobody to send the weekly summary to; fill notify in targets.yml", file=sys.stderr)
         return 1
     append_summary(args.summary, ["## Weekly summary", "", f"- {subject} ({len(to)} recipient(s))"])
-    return deliver([(to, subject, blocks)], args.outbox, env)
+    return deliver([(to, subject, blocks)], args.outbox, env, args.undelivered, args.runs_url)
 
 
 def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> int:
@@ -558,6 +591,7 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
     common.add_argument("--to", help="send everything only to these addresses (testing)")
     common.add_argument("--outbox", type=Path, help="write .eml files here instead of sending")
     common.add_argument("--summary", type=Path)
+    common.add_argument("--undelivered", type=Path, help="when sending fails, describe what was lost here (Markdown)")
 
     run = sub.add_parser("run", parents=[common], help="mail the changes of one run")
     run.add_argument("--results", type=Path, required=True, help="results.json from aggregate.py")

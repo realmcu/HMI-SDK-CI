@@ -138,6 +138,11 @@ Mail is sent through SMTP over TLS with the repository secrets `SMTP_USER` and `
 the server is `smtp.<domain of SMTP_USER>`. The `notify_to` input of a manual run sends that
 run's mail only to the addresses given, for testing.
 
+smtp.163.com rejects many logins from runner IPs with `535 authentication failed` although the
+password is right, so every failure is retried 4 times with pauses of 30 s, 1, 2 and 4 minutes.
+Mail that still cannot be sent is reported on the open `CI mail undelivered` issue of this
+repository (subjects and run link only); watch the repository to get GitHub's mail about it.
+
 ## Manifest change polling
 
 `.github/workflows/poll.yml` runs every two hours. It compares the manifest repository's `master`

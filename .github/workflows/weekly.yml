@@ -14,11 +14,12 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 
 jobs:
   weekly:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout CI repository
         uses: actions/checkout@v7
@@ -54,4 +55,11 @@ jobs:
             --today "$(date -u +%Y-%m-%d)" \
             --runs-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/workflows/hmi-ci.yml" \
             --summary "${GITHUB_STEP_SUMMARY}" \
+            --undelivered undelivered.md \
             ${NOTIFY_TO:+--to "${NOTIFY_TO}"}
+
+      - name: Report undelivered mail
+        if: failure() && hashFiles('undelivered.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/report_undelivered.sh undelivered.md
