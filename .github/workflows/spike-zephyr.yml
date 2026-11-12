@@ -113,7 +113,12 @@ jobs:
       - name: Probe version generation defect
         continue-on-error: true
         working-directory: ws/zephyrproject/realtek-app/samples/honeygui
+        # fetch.py updates with --narrow (no tags); a plain `west update` as in the README
+        # brings the zsdk tag that git describe needs, so fetch it to probe the same state.
         run: |
+          read -r url rev <<< "$(cd "${WS}" && west list -f '{url} {revision}' rtl87x3g-common-sdk)"
+          git -C ../.. fetch -q "${url}" "refs/tags/${rev}:refs/tags/${rev}"
+          git -C ../.. describe --tags | tee "${REPORT_DIR}/zsdk-describe.txt"
           out="$(mktemp -d)/VERSION"
           bash ../../tools/Gadgets/version_gen_config.sh "${out}" > "${REPORT_DIR}/version-probe.log" 2>&1 || true
           cat "${REPORT_DIR}/version-probe.log"
@@ -149,7 +154,9 @@ jobs:
             tail -40 "${REPORT_DIR}/build-${name}.log"
             echo "::endgroup::"
             bin_dir="${app_root}/${app}/bin"
-            if [ "${code}" -eq 0 ] && [ -s "${bin_dir}/app_MP.bin" ]; then result=PASS; else result=FAIL; failed=1; fi
+            # md5_generate.sh renames app_MP.bin to app_MP-v<version>-<gcid>-<md5>.bin.
+            mp_bin=$(find "${bin_dir}" -maxdepth 1 -name 'app_MP-*.bin' -size +0 2>/dev/null | head -1)
+            if [ "${code}" -eq 0 ] && [ -n "${mp_bin}" ]; then result=PASS; else result=FAIL; failed=1; fi
             [ -d "${bin_dir}" ] && ls -l "${bin_dir}" > "${REPORT_DIR}/bin-${name}.txt"
             build_bytes=$(du -sb "${app_root}/${app}/build" 2>/dev/null | cut -f1)
             printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${app}" "${board}" "${extra}" "${result}" "${secs}" "${build_bytes}" \
