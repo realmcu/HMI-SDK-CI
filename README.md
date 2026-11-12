@@ -5,7 +5,8 @@ Continuous verification for the Realtek HMI SDKs published through
 
 Every night this repository checks that each public manifest can still be fetched the way its README
 describes (`west init` + `west update`) and that the SDK builds. It only reads the manifest repository
-and never pushes to any product repository.
+and never pushes to any product repository; lock updates are offered as artifacts (see
+[Lock promotion](#lock-promotion)).
 
 **This is not an SDK.** Customers do not need to clone it; follow the instructions in
 [realmcu/HMI-MANIFEST](https://github.com/realmcu/HMI-MANIFEST) instead.
@@ -102,6 +103,18 @@ when there is one, and runs the build adapter. Reports are uploaded as
 A network failure on a gitee repository is retried, then retried against `fallback_manifest` (for the
 `locked` track, a mirror copy derived from the lock). A failure on a github repository has no mirror
 to fall back to. A build from the mirror never produces a lock promotion.
+
+## Lock promotion
+
+When the `floating` track of a target with a `lock_manifest` passes, `scripts/promotion.py` uploads
+`lock-promotion-<id>-<run id>` (kept for 90 days): the lock that `bump_lock.py` writes from the
+revisions this job built, a report of the commits it moves across, and `promotion-metadata.json`
+(CI run and commit, manifest commit, SHA-256 of both files). Only scheduled and manually dispatched
+runs of manifest `master` that did not fall back to the mirror produce one.
+
+CI never commits the lock. A maintainer promotes it through Gerrit with the manifest repository's
+`scripts/promote_lock.py`, which also asks GitHub whether the run was a scheduled or dispatched run of
+`hmi-ci.yml` on this repository's `main`, and checks that the manifest commit is on reviewed history.
 
 ## Results across runs
 

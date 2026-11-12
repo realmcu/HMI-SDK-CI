@@ -199,6 +199,54 @@ jobs:
             --jobs "$(nproc)" \
             --report-dir "${REPORT_DIR}/build"
 
+      # A mirror build must not become the gitee lock; a manifest branch other than
+      # master cannot be promoted, and push runs test CI changes.
+      - name: Package lock promotion
+        id: promotion
+        if: >-
+          matrix.lock_manifest && steps.build.outcome == 'success' && env.USED_FALLBACK != 'true'
+          && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && (inputs.manifest_ref || 'master') == 'master'
+        env:
+          LOCK: ${{ matrix.lock_manifest }}
+          FLOATING: ${{ matrix.manifest }}
+          MANIFEST_COMMIT: ${{ needs.plan.outputs.manifest_commit }}
+        run: |
+          python ci/scripts/promotion.py \
+            --manifest-dir ws/.manifest \
+            --lock "${LOCK}" \
+            --floating "${FLOATING}" \
+            --candidate "${REPORT_DIR}/manifest-revisions.yml" \
+            --repos "${WS}" \
+            --manifest-repository realmcu/HMI-MANIFEST \
+            --manifest-commit "${MANIFEST_COMMIT}" \
+            --out promotion
+
+      - name: Upload lock promotion
+        if: steps.promotion.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: lock-promotion-${{ matrix.id }}-${{ github.run_id }}
+          path: promotion/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Announce promotion candidate
+        if: steps.promotion.outcome == 'success'
+        run: |
+          {
+            echo "### Lock promotion candidate"
+            echo
+            echo "Artifact \`lock-promotion-${{ matrix.id }}-${GITHUB_RUN_ID}\` holds the lock this run verified."
+            echo "Promote it from a manifest checkout at gerrit/master:"
+            echo
+            echo '```'
+            echo "python scripts/promote_lock.py prepare"
+            echo "python scripts/promote_lock.py submit"
+            echo '```'
+            echo
+          } >> "${GITHUB_STEP_SUMMARY}"
+
       # SPEC 5.3: the first failing stage decides the result.
       - name: Classify result
         if: always()
