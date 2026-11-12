@@ -43,9 +43,10 @@ table lists fixed mail recipients (see [Mail](#mail)).
 | `tier` | yes | `customer`: runs nightly and mails on failure. `preview`: runs, results go to the job summary only. `disabled`: kept in the file but not run. |
 | `manifest` | yes | Primary manifest (`.yml`). |
 | `fallback_manifest` | no | Manifest to retry with when the primary fails for network reasons. A fallback build never produces a lock promotion. |
+| `mirror_manifest` | no | The other public manifest of the same SDK. Checked against the primary like a fallback, but never fetched. Not combined with `fallback_manifest`. |
 | `lock_manifest` | no | Fully pinned snapshot. Adds a `locked` track and a drift report. Requires `version_model: floating`. |
-| `version_model` | yes | `pinned`, `mixed` or `floating`. A `customer` target must be `pinned`, or `floating` with a `lock_manifest`. |
-| `builder` | yes | Build adapter. Currently only `hmi-west`. |
+| `version_model` | yes | `pinned`, `mixed` or `floating`. A `customer` target must be `pinned`, or `floating` with a `lock_manifest`, and must not use workarounds. |
+| `builder` | yes | Build adapter: `hmi-west` or `zephyr-west`. |
 | `build` | yes | Adapter parameters, checked per adapter (see below). |
 | `toolchain` | yes | Tool name to version, for example `arm-gnu: 12.3.rel1`. The version actually used is written to the report. |
 | `triggers` | yes | Non-empty list of `nightly` and/or `on-change`. |
@@ -60,10 +61,26 @@ Unknown fields and duplicate keys are errors, so a misspelt field cannot be sile
 | `builder` | `build` fields |
 | --- | --- |
 | `hmi-west` | `profile`: `quick` (bank 0 only) or `full` (all four modes). Runs the manifest repository's `scripts/verify_dashboard.py`. |
+| `zephyr-west` | `products`: list of `name`, `app` (relative to `zephyrproject/realtek-app`), `board`, optional `cmake_args` (`-DNAME=value`) and `workarounds`. Optional `workarounds` for the whole target. Runs the SDK's `fetch_assets.py`, then `west build -b <board> -p always` in each `app` directory and requires `bin/app_MP-*.bin`. The worst product decides the result. |
 
 | `toolchain` key | Versions |
 | --- | --- |
 | `arm-gnu` | `12.3.rel1`, `13.2.rel1` (Arm GNU Toolchain, x86_64 Linux host) |
+| `zephyr-sdk` | `0.16.9` (minimal bundle plus the `arm-zephyr-eabi` toolchain; sets `ZEPHYR_SDK_INSTALL_DIR`) |
+
+#### Workarounds
+
+A workaround is a temporary deviation from building the SDK exactly as shipped, used only when a
+known SDK defect would otherwise hide every later result. Each one is registered in
+`scripts/adapters/zephyr_west.py` with the decision that allows it; `targets.yml` can only name
+registered ones, and its cmake arguments cannot be written out by hand. Every run probes whether the
+defect still exists and says so in the report, and a passing build is shown as
+`PASS (with workarounds)`.
+
+| Name | Declared in | Effect |
+| --- | --- | --- |
+| `d11-skip-version-generation` | a product | `-DENABLE_GENERATE_VERSION=OFF`: the SDK's version script empties the tracked `VERSION` of in-repository samples |
+| `d12-restore-exec-bits` | `build.workarounds` | Restores the executable bit of post-build tools the SDK tracks as `100644` |
 
 ## Plan
 

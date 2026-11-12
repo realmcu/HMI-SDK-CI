@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 import yaml
 
+from adapters.zephyr_west import WORKAROUNDS
 from toolchain import TOOLS
 
 SCHEMA_VERSION = 1
@@ -38,7 +39,7 @@ REQUIRED_FIELDS = (
     "toolchain",
     "triggers",
 )
-OPTIONAL_FIELDS = ("fallback_manifest", "lock_manifest", "artifacts", "owners", "timeout")
+OPTIONAL_FIELDS = ("fallback_manifest", "mirror_manifest", "lock_manifest", "artifacts", "owners", "timeout")
 
 
 class ConfigError(Exception):
@@ -60,6 +61,8 @@ class Target:
     toolchain: dict[str, str]
     triggers: tuple[str, ...]
     fallback_manifest: str | None = None
+    # Compared with the primary like a fallback, but never fetched (D13).
+    mirror_manifest: str | None = None
     lock_manifest: str | None = None
     artifacts: tuple[str, ...] = ()
     owners: tuple[str, ...] = ()
@@ -207,22 +210,96 @@ def _validate_hmi_west(build: dict[str, Any], where: str, errors: list[str]) -> 
         _check_choice(build["profile"], ("quick", "full"), _join(where, "profile"), errors)
 
 
+CMAKE_ARG_PATTERN = re.compile(r"^-D[A-Za-z0-9_]+=[A-Za-z0-9_.,/+-]*$")
+BOARD_PATTERN = re.compile(r"^[a-z0-9_]+(/[a-z0-9_]+)*$")
+# A workaround's cmake argument written out by hand would hide it from reports (D11).
+WORKAROUND_ARGS = {arg: name for name, w in WORKAROUNDS.items() for arg in w.cmake_args}
+
+
+def _check_workarounds(value: Any, where: str, scope: str, errors: list[str]) -> None:
+    before = len(errors)
+    _check_str_list(value, where, errors, non_empty=True)
+    if len(errors) != before:
+        return
+    for name in value:
+        workaround = WORKAROUNDS.get(name)
+        if workaround is None:
+            errors.append(f"{where}: unknown workaround {name!r}; known: {', '.join(WORKAROUNDS)}")
+        elif workaround.scope != scope:
+            place = "build.workarounds" if workaround.scope == "target" else "each product's workarounds"
+            errors.append(f"{where}: {name!r} must be declared in {place}")
+
+
+def _validate_zephyr_west(build: dict[str, Any], where: str, errors: list[str]) -> None:
+    _check_keys(build, where, ("products",), ("workarounds",), errors)
+    if "workarounds" in build:
+        _check_workarounds(build["workarounds"], _join(where, "workarounds"), "target", errors)
+    products = build.get("products")
+    if "products" not in build:
+        return
+    if not isinstance(products, list) or not products:
+        errors.append(f"{_join(where, 'products')}: must be a non-empty list")
+        return
+    names = []
+    for i, product in enumerate(products):
+        at = f"{where}.products[{i}]"
+        if not isinstance(product, dict):
+            errors.append(f"{at}: must be a mapping")
+            continue
+        _check_keys(product, at, ("name", "app", "board"), ("cmake_args", "workarounds"), errors)
+        name = product.get("name")
+        if "name" in product:
+            if isinstance(name, str) and ID_PATTERN.match(name):
+                names.append(name)
+            else:
+                errors.append(f"{at}.name: must be lowercase letters and digits joined by single hyphens (got {name!r})")
+        if "app" in product:
+            _check_relative_path(product["app"], MANIFEST_PATTERN, f"{at}.app", errors)
+        if "board" in product and not (isinstance(product["board"], str) and BOARD_PATTERN.match(product["board"])):
+            errors.append(f"{at}.board: must be a Zephyr board name (got {product['board']!r})")
+        if "cmake_args" in product:
+            before = len(errors)
+            _check_str_list(product["cmake_args"], f"{at}.cmake_args", errors, non_empty=True)
+            if len(errors) == before:
+                for arg in product["cmake_args"]:
+                    if not CMAKE_ARG_PATTERN.match(arg):
+                        errors.append(f"{at}.cmake_args: must be -DNAME=value (got {arg!r})")
+                    elif arg in WORKAROUND_ARGS:
+                        errors.append(f"{at}.cmake_args: {arg!r} is workaround {WORKAROUND_ARGS[arg]!r}; "
+                                      "declare it under workarounds")
+        if "workarounds" in product:
+            _check_workarounds(product["workarounds"], f"{at}.workarounds", "product", errors)
+    for name, count in Counter(names).items():
+        if count > 1:
+            errors.append(f"{_join(where, 'products')}: duplicate name {name!r}")
+
+
+def uses_workarounds(builder: str, build: dict[str, Any]) -> bool:
+    if builder != "zephyr-west":
+        return False
+    return bool(build.get("workarounds")) or any(p.get("workarounds") for p in build.get("products", ()))
+
+
 # Builder name -> validator for its ``build`` parameters. A builder is accepted
 # in targets.yml only once its adapter and validator exist.
 BUILDERS: dict[str, Callable[[dict[str, Any], str, list[str]], None]] = {
     "hmi-west": _validate_hmi_west,
+    "zephyr-west": _validate_zephyr_west,
 }
 
 
 def _check_cross_fields(raw: dict[str, Any], where: str, errors: list[str]) -> None:
     manifest = raw["manifest"]
     fallback = raw.get("fallback_manifest")
+    mirror = raw.get("mirror_manifest")
     lock = raw.get("lock_manifest")
     model = raw["version_model"]
 
-    for name, value in (("fallback_manifest", fallback), ("lock_manifest", lock)):
+    for name, value in (("fallback_manifest", fallback), ("mirror_manifest", mirror), ("lock_manifest", lock)):
         if value == manifest:
             errors.append(f"{where}.{name}: must differ from manifest")
+    if fallback is not None and mirror is not None:
+        errors.append(f"{where}.mirror_manifest: a fallback_manifest is already compared; use one of the two")
     if fallback is not None and fallback == lock:
         errors.append(f"{where}.fallback_manifest: must differ from lock_manifest")
     if lock is not None and model != "floating":
@@ -235,6 +312,8 @@ def _check_cross_fields(raw: dict[str, Any], where: str, errors: list[str]) -> N
                 f"{where}: customer targets must be pinned, or floating with a lock_manifest "
                 f"(got {shape})"
             )
+        if uses_workarounds(raw["builder"], raw["build"]):
+            errors.append(f"{where}: customer targets must not use workarounds; drop them or stay preview")
 
 
 def _validate_target(raw: Any, index: int, errors: list[str]) -> Target | None:
@@ -259,7 +338,7 @@ def _validate_target(raw: Any, index: int, errors: list[str]) -> Target | None:
         _check_choice(raw["tier"], TIERS, f"{where}.tier", errors)
     if "version_model" in raw:
         _check_choice(raw["version_model"], VERSION_MODELS, f"{where}.version_model", errors)
-    for name in ("manifest", "fallback_manifest", "lock_manifest"):
+    for name in ("manifest", "fallback_manifest", "mirror_manifest", "lock_manifest"):
         if name in raw:
             _check_manifest(raw[name], f"{where}.{name}", errors)
     if "builder" in raw:
@@ -310,6 +389,7 @@ def _validate_target(raw: Any, index: int, errors: list[str]) -> Target | None:
         toolchain=dict(raw["toolchain"]),
         triggers=tuple(raw["triggers"]),
         fallback_manifest=raw.get("fallback_manifest"),
+        mirror_manifest=raw.get("mirror_manifest"),
         lock_manifest=raw.get("lock_manifest"),
         artifacts=tuple(raw.get("artifacts", ())),
         owners=tuple(raw.get("owners", ())),

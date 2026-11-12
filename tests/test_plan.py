@@ -314,6 +314,22 @@ def test_pair_difference_is_an_error(workspace):
     assert error.startswith("manifest and fallback_manifest differ: app.revision")
 
 
+def test_mirror_difference_is_an_error_and_mirror_is_not_a_fallback(workspace):
+    tmp_path, manifests, targets = workspace
+    write(manifests, "chargebox/g-github.yml", TAGGED.format(app_revision=SHA_B))
+    text = targets.read_text(encoding="utf-8").replace(
+        "    manifest: chargebox/g-gitee.yml\n",
+        "    manifest: chargebox/g-gitee.yml\n    mirror_manifest: chargebox/g-github.yml\n",
+    )
+    targets.write_text(text, encoding="utf-8")
+    _, report = run_plan(workspace, "--event", "manual")
+    (error,) = by_id(report)["g-chargebox"]["errors"]
+    assert error.startswith("manifest and mirror_manifest differ: app.revision")
+    assert "mirror=" in error
+    (entry,) = [e for e in report["matrix"]["include"] if e["id"] == "g-chargebox"]
+    assert entry["fallback_manifest"] is None
+
+
 def test_unpinned_lock_is_an_error(workspace):
     _, manifests, _ = workspace
     write(manifests, "dashboard/e-gitee.lock.yml", LOCK.replace(SHA_B, "master"))

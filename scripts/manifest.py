@@ -176,7 +176,7 @@ def derive_model(projects: Iterable[Project], resolve: RefResolver) -> ModelResu
     return ModelResult(model, tuple(floating), tuple(unresolved), tuple(missing))
 
 
-def compare_pair(primary: list[Project], other: list[Project]) -> list[str]:
+def compare_pair(primary: list[Project], other: list[Project], label: str = "fallback") -> list[str]:
     """List differences other than URL between two manifests of the same project."""
     a = {p.name: p for p in primary}
     b = {p.name: p for p in other}
@@ -185,11 +185,10 @@ def compare_pair(primary: list[Project], other: list[Project]) -> list[str]:
         if name not in b:
             diffs.append(f"project {name!r} only in primary")
         elif name not in a:
-            diffs.append(f"project {name!r} only in fallback")
+            diffs.append(f"project {name!r} only in {label}")
         else:
             for field in PAIR_FIELDS:
                 left, right = getattr(a[name], field), getattr(b[name], field)
                 if left != right:
-                    label = field.rstrip("_")
-                    diffs.append(f"{name}.{label}: primary={left!r} fallback={right!r}")
+                    diffs.append(f"{name}.{field.rstrip('_')}: primary={left!r} {label}={right!r}")
     return diffs

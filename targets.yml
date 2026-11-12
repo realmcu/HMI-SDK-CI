@@ -23,3 +23,50 @@ targets:
     triggers: [nightly, on-change]
     timeout: 60
     owners: [luke_sun@realsil.com.cn]
+
+  # x3G SDKs pull the zsdk and zephyr from github even through their gitee manifest,
+  # so the github manifest is primary and has nothing to fall back to.
+  - id: rtl8773g-dashboard
+    tier: preview
+    manifest: dashboard/rtl8773g-dashboard-github.yml
+    mirror_manifest: dashboard/rtl8773g-dashboard-gitee.yml
+    version_model: pinned
+    builder: zephyr-west
+    build:
+      workarounds: [d12-restore-exec-bits]
+      products:
+        - {name: dashboard, app: applications/dashboard, board: rtl87x3g_evb}
+        - name: sample-honeygui
+          app: samples/honeygui
+          board: rtl87x3g_sample
+          workarounds: [d11-skip-version-generation]
+    toolchain:
+      # SDK_VERSION of the zephyr revision the zsdk pins.
+      zephyr-sdk: 0.16.9
+    triggers: [nightly, on-change]
+    timeout: 45
+    owners: [luke_sun@realsil.com.cn]
+
+  - id: rtl8773g-chargebox
+    tier: preview
+    manifest: chargebox/rtl8773g-chargebox-github.yml
+    mirror_manifest: chargebox/rtl8773g-chargebox-gitee.yml
+    version_model: mixed
+    builder: zephyr-west
+    build:
+      workarounds: [d12-restore-exec-bits]
+      products:
+        - {name: chargebox, app: applications/chargebox, board: rtl87x3g_evb}
+        - name: sample-honeygui
+          app: samples/honeygui
+          board: rtl87x3g_sample
+          workarounds: [d11-skip-version-generation]
+        - name: sample-lvgl
+          app: samples/lvgl
+          board: rtl87x3g_sample
+          workarounds: [d11-skip-version-generation]
+    toolchain:
+      zephyr-sdk: 0.16.9
+    triggers: [nightly, on-change]
+    timeout: 45
+    owners: [luke_sun@realsil.com.cn]

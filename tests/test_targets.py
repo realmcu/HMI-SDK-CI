@@ -49,7 +49,7 @@ def errors_of(data) -> list[str]:
 
 def test_repository_targets_file_is_valid():
     targets = load_targets(REPO_ROOT / "targets.yml")
-    assert [t.id for t in targets] == ["rtl8773e-dashboard"]
+    assert [t.id for t in targets] == ["rtl8773e-dashboard", "rtl8773g-dashboard", "rtl8773g-chargebox"]
 
 
 def test_repository_notify_table_is_valid():
@@ -125,7 +125,8 @@ def test_top_level_errors(data, expected):
         ({"toolchain": {}}, ".toolchain: must be a non-empty mapping"),
         ({"toolchain": {"arm-gnu": 12.3}}, ".toolchain.arm-gnu: version must be a quoted string"),
         ({"toolchain": {"Arm GNU": "12.3"}}, ".toolchain: tool name must be"),
-        ({"toolchain": {"zephyr-sdk": "0.16.8"}}, ".toolchain.zephyr-sdk: unknown tool"),
+        ({"toolchain": {"zephyr-sdk": "0.16.8"}}, ".toolchain.zephyr-sdk: no pinned release"),
+        ({"toolchain": {"iar": "9.1"}}, ".toolchain.iar: unknown tool"),
         ({"toolchain": {"arm-gnu": "14.1.rel1"}}, ".toolchain.arm-gnu: no pinned release"),
         ({"triggers": []}, ".triggers: must not be empty"),
         ({"triggers": ["push"]}, ".triggers: must be one of"),
@@ -207,7 +208,7 @@ def test_missing_file(tmp_path):
 
 def test_plan_validate_exit_codes(tmp_path, capsys):
     assert plan.main(["--validate"]) == 0
-    assert "1 target(s) valid: rtl8773e-dashboard" in capsys.readouterr().out
+    assert "3 target(s) valid: rtl8773e-dashboard, " in capsys.readouterr().out
 
     bad = tmp_path / "targets.yml"
     bad.write_text("schema_version: 1\ntargets:\n  - id: x\n", encoding="utf-8")

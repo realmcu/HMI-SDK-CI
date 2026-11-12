@@ -115,6 +115,7 @@ def aggregate(plan: dict, results: list[dict], previous: dict[str, dict], run: d
                     "previous_failure_status": prev_failure,
                     "previous_unverified": prev.get("unverified", 0) if prev else 0,
                     "used_fallback": bool(result and result.get("used_fallback")),
+                    "with_workarounds": bool(result and result.get("with_workarounds")),
                     "plan_errors": target.get("errors", []),
                 }
             )
@@ -142,7 +143,8 @@ def summary_markdown(report: dict) -> str:
         elif change == "unverified" and e["unverified"] > 1:
             change = f"unverified ({e['unverified']} runs)"
         mark = " ⚠️" if e["track"] == "locked" and e["status"] in ("BUILD_FAIL", "MANIFEST_FAIL") else ""
-        lines.append(f"| `{e['id']}` | {e['track']} | {e['tier']} | {e['status']}{mark} | {change} |")
+        status = f"{e['status']} (with workarounds)" if e.get("with_workarounds") else e["status"]
+        lines.append(f"| `{e['id']}` | {e['track']} | {e['tier']} | {status}{mark} | {change} |")
     if any(e["track"] == "locked" and e["status"] in ("BUILD_FAIL", "MANIFEST_FAIL") for e in report["entries"]):
         lines += ["", "⚠️ A locked manifest no longer builds: the known-good snapshot is gone."]
     return "\n".join(lines) + "\n"

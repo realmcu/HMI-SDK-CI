@@ -144,7 +144,8 @@ jobs:
         env:
           TOOLCHAIN: ${{ toJSON(matrix.toolchain) }}
         run: |
-          python ci/scripts/toolchain.py --toolchain "${TOOLCHAIN}" --cache-dir "${TOOLCHAIN_CACHE}" >> "${GITHUB_PATH}"
+          python ci/scripts/toolchain.py --toolchain "${TOOLCHAIN}" --cache-dir "${TOOLCHAIN_CACHE}" \
+            --env-file "${GITHUB_ENV}" >> "${GITHUB_PATH}"
 
       - name: Install build tools
         timeout-minutes: 5
@@ -166,6 +167,14 @@ jobs:
       - name: Record verified revisions
         working-directory: ws
         run: west manifest --freeze > "${REPORT_DIR}/manifest-revisions.yml"
+
+      # The requirements file comes with the fetched zephyr, as in the SDK README.
+      - name: Install Zephyr Python dependencies
+        if: matrix.builder == 'zephyr-west'
+        timeout-minutes: 5
+        run: |
+          python -m pip install --disable-pip-version-check -r ws/zephyrproject/zephyr/scripts/requirements-base.txt
+          echo "ZEPHYR_TOOLCHAIN_VARIANT=zephyr" >> "${GITHUB_ENV}"
 
       # Written before the build so a failed build still says what moved.
       - name: Report drift against locked manifest
@@ -261,6 +270,7 @@ jobs:
           MANIFEST_COMMIT: ${{ needs.plan.outputs.manifest_commit }}
         run: |
           build_result="$(python -c 'import json,sys; print(json.load(open(sys.argv[1])).get("result",""))' "${REPORT_DIR}/build/summary.json" 2>/dev/null || true)"
+          with_workarounds="$(python -c 'import json,sys; print(str(json.load(open(sys.argv[1])).get("with_workarounds", False)).lower())' "${REPORT_DIR}/build/summary.json" 2>/dev/null || echo false)"
           if [ "${TOOLCHAIN_OUTCOME}" != "success" ]; then
             status=INFRA_FAIL
           elif [ "${FETCH_OUTCOME}" != "success" ]; then
@@ -273,7 +283,7 @@ jobs:
             status=INFRA_FAIL
           fi
           mkdir -p "${REPORT_DIR}"
-          python - "${status}" <<'PY'
+          python - "${status}" "${with_workarounds}" <<'PY'
           import json, os, sys
           from pathlib import Path
           report = Path(os.environ["REPORT_DIR"])
@@ -284,6 +294,8 @@ jobs:
               "manifest": os.environ.get("FETCHED_MANIFEST") or os.environ["MANIFEST"],
               "used_fallback": os.environ.get("USED_FALLBACK") == "true",
               "status": sys.argv[1],
+              # A PASS that needed a temporary workaround (HMI-CI decisions D11, D12).
+              "with_workarounds": sys.argv[1] == "PASS" and sys.argv[2] == "true",
               "ci_commit": os.environ["GITHUB_SHA"],
               "manifest_commit": os.environ["MANIFEST_COMMIT"],
           }

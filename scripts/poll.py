@@ -37,7 +37,7 @@ def changed_files(manifest_root: Path, old: str, new: str) -> list[str] | None:
 
 
 def affected_targets(targets: list[Target], files: list[str] | None) -> list[str]:
-    """Targets with on-change whose manifest, fallback or lock is among ``files``.
+    """Targets with on-change whose manifest, fallback, mirror or lock is among ``files``.
 
     Unknown changes (``files`` is None) affect every on-change target.
     """
@@ -45,7 +45,8 @@ def affected_targets(targets: list[Target], files: list[str] | None) -> list[str
     for target in targets:
         if target.tier == "disabled" or "on-change" not in target.triggers:
             continue
-        own = {m for m in (target.manifest, target.fallback_manifest, target.lock_manifest) if m}
+        own = {m for m in (target.manifest, target.fallback_manifest, target.mirror_manifest,
+                           target.lock_manifest) if m}
         if files is None or own & set(files):
             result.append(target.id)
     return result

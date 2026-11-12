@@ -192,6 +192,33 @@ def test_safe_extract_rejects_escape(tmp_path, members, link):
         toolchain.safe_extract(archive, dest)
 
 
+def test_install_extracts_extra_archives_and_writes_env(tmp_path, monkeypatch, capsys):
+    src = tmp_path / "src"
+    src.mkdir()
+    make_tar(src / "sdk.tar.xz", {"sdk-1/sdk_version": b"1"})
+    make_tar(src / "gcc.tar.xz", {"arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc": b"gcc"})
+    digest = {name: hashlib.sha256((src / name).read_bytes()).hexdigest() for name in ("sdk.tar.xz", "gcc.tar.xz")}
+    release = toolchain.Release(
+        "https://example.invalid/sdk.tar.xz", digest["sdk.tar.xz"], "sdk-1",
+        extra=(toolchain.Archive("https://example.invalid/gcc.tar.xz", digest["gcc.tar.xz"]),),
+        bin_dir="arm-zephyr-eabi/bin", home_env="ZEPHYR_SDK_INSTALL_DIR",
+    )
+    monkeypatch.setitem(toolchain.TOOLS, "fake-sdk", {"1": release})
+    monkeypatch.setattr(toolchain, "download",
+                        lambda url, target, attempts=3: target.write_bytes((src / Path(url).name).read_bytes()))
+    env = tmp_path / "env"
+    cache = tmp_path / "cache"
+    assert toolchain.main(["--toolchain", '{"fake-sdk": "1"}', "--cache-dir", str(cache), "--env-file", str(env)]) == 0
+    bin_dir = Path(capsys.readouterr().out.strip())
+    assert (bin_dir / "arm-zephyr-eabi-gcc").read_bytes() == b"gcc"
+    assert env.read_text() == f"ZEPHYR_SDK_INSTALL_DIR={(cache / 'fake-sdk' / '1' / 'sdk-1').resolve()}\n"
+
+
+def test_registered_zephyr_sdk_matches_spike():
+    release = toolchain.TOOLS["zephyr-sdk"]["0.16.9"]
+    assert release.sha256.startswith("b433f19b") and release.extra[0].sha256.startswith("81162a83")
+
+
 def test_cache_key(capsys):
     assert toolchain.main(["--toolchain", '{"arm-gnu": "12.3.rel1"}', "--cache-dir", ".", "--cache-key"]) == 0
     assert capsys.readouterr().out.strip() == "toolchain-arm-gnu-12.3.rel1-12a281564431"

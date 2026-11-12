@@ -65,6 +65,7 @@ def check_target(target: Target, manifest_root: Path, resolve: RefResolver) -> T
         for name, value in (
             ("manifest", target.manifest),
             ("fallback_manifest", target.fallback_manifest),
+            ("mirror_manifest", target.mirror_manifest),
             ("lock_manifest", target.lock_manifest),
         )
         if value is not None
@@ -107,11 +108,12 @@ def check_target(target: Target, manifest_root: Path, resolve: RefResolver) -> T
         if unpinned:
             result.errors.append(f"lock_manifest has projects not pinned to a SHA: {', '.join(unpinned)}")
 
-    fallback = parsed.get("fallback_manifest")
-    if fallback is not None:
-        diffs = compare_pair(parsed["manifest"], fallback)
-        if diffs:
-            result.errors.append("manifest and fallback_manifest differ: " + "; ".join(diffs))
+    for name, label in (("fallback_manifest", "fallback"), ("mirror_manifest", "mirror")):
+        other = parsed.get(name)
+        if other is not None:
+            diffs = compare_pair(parsed["manifest"], other, label)
+            if diffs:
+                result.errors.append(f"manifest and {name} differ: " + "; ".join(diffs))
     return result
 
 
