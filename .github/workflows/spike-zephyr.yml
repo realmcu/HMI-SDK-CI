@@ -21,16 +21,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # rtl8773g-chargebox is left out until its pinned lvgl revision exists on github.
         include:
-          - id: rtl8773g-chargebox
-            manifest: chargebox/rtl8773g-chargebox-github.yml
-            # app dir (relative to zephyrproject/realtek-app) | board | extra cmake args
-            builds: |
-              applications/chargebox|rtl87x3g_evb|
-              samples/honeygui|rtl87x3g_sample|-DENABLE_GENERATE_VERSION=OFF
-              samples/lvgl|rtl87x3g_sample|-DENABLE_GENERATE_VERSION=OFF
           - id: rtl8773g-dashboard
             manifest: dashboard/rtl8773g-dashboard-github.yml
+            # app dir (relative to zephyrproject/realtek-app) | board | extra cmake args
             builds: |
               applications/dashboard|rtl87x3g_evb|
               samples/honeygui|rtl87x3g_sample|-DENABLE_GENERATE_VERSION=OFF
@@ -98,6 +93,20 @@ jobs:
           echo "fetch_assets_s=$(( $(date +%s) - start ))" >> "${REPORT_DIR}/timing.txt"
           du -sb "${WS}/zephyrproject/realtek-app/bin" "${WS}/zephyrproject/realtek-app/tools" > "${REPORT_DIR}/assets-bytes.txt"
           sha256sum "${WS}/zephyrproject/realtek-app/assets.yaml" | cut -d' ' -f1 > "${REPORT_DIR}/assets-yaml-sha256.txt"
+
+      # The build executes these two files directly, but zsdk tracks them as 100644, so
+      # Linux builds fail with "Permission denied". Record whether that still holds.
+      - name: Work around missing executable bits
+        working-directory: ws/zephyrproject/realtek-app
+        run: |
+          files="tools/Gadgets/prepend_header tools/Gadgets/version_generation/GitGenerateVersion.sh"
+          git ls-files -s ${files} | tee "${REPORT_DIR}/exec-bit-modes.txt"
+          if grep -q '^100644' "${REPORT_DIR}/exec-bit-modes.txt"; then
+            echo "exec_bit_defect=present" | tee -a "${REPORT_DIR}/timing.txt"
+            chmod +x ${files}
+          else
+            echo "exec_bit_defect=absent" | tee -a "${REPORT_DIR}/timing.txt"
+          fi
 
       # Checks whether the zsdk version-generation defect (D11) still reproduces,
       # without touching any tracked VERSION file.
