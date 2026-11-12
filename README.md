@@ -163,6 +163,7 @@ A failing `locked` track is marked ⚠ and listed first. A run's mail holds ever
 | `notify.ci_maintainers` | everything, and are the only ones told about `INFRA_FAIL` |
 | `notify.watchers` | everything except `INFRA_FAIL`, and the weekly summary |
 | a target's `owners` | that target's mail, and the weekly summary |
+| `notify.weekly` | the weekly summary only |
 
 Mail is sent through SMTP over TLS with the repository secrets `SMTP_USER` and `SMTP_PASSWORD`;
 the server is `smtp.<domain of SMTP_USER>`. The `notify_to` input of a manual run sends that

@@ -6,6 +6,15 @@ schema_version: 1
 notify:
   ci_maintainers: [luke_sun@realsil.com.cn]
   watchers: [howie_wang@realsil.com.cn]
+  weekly:
+    - shel_deng@realsil.com.cn
+    - astor_zhang@realsil.com.cn
+    - howie_wang@realsil.com.cn
+    - luke_sun@realsil.com.cn
+    - roy_xie@realsil.com.cn
+    - sienna_shen@realsil.com.cn
+    - triton_yu@realsil.com.cn
+    - wenjing_jiang@realsil.com.cn
 
 targets:
   - id: rtl8773e-dashboard

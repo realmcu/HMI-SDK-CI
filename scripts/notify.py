@@ -571,7 +571,8 @@ def cmd_weekly(args: argparse.Namespace, env: dict[str, str]) -> int:
     else:
         targets = load_targets(args.targets)
         recipients = Recipients(targets, load_notify(args.targets))
-        people: set[str] = set(recipients.notify.ci_maintainers) | set(recipients.notify.watchers)
+        notify = recipients.notify
+        people: set[str] = set(notify.ci_maintainers) | set(notify.watchers) | set(notify.weekly)
         for target in targets:
             if target.tier == "customer":
                 people |= recipients.of("code", target.id)

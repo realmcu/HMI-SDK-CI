@@ -18,6 +18,7 @@ from targets import Notify, Target  # noqa: E402
 CI = "ci@example.com"
 LEAD = "lead@example.com"
 DASH_OWNER = "dash@example.com"
+WEEKLY = "weekly@example.com"  # weekly summary only; never in a run's mail
 TABLE = Notify(ci_maintainers=(CI,), watchers=(LEAD,))
 TARGETS = [
     Target("dash", "customer", "d.yml", "floating", "hmi-west", {}, {}, ("nightly",), owners=(DASH_OWNER,)),
@@ -149,7 +150,7 @@ def targets_file(tmp_path: Path) -> Path:
     path = tmp_path / "targets.yml"
     path.write_text(
         "schema_version: 1\n"
-        f"notify: {{ci_maintainers: [{CI}], watchers: [{LEAD}]}}\n"
+        f"notify: {{ci_maintainers: [{CI}], watchers: [{LEAD}], weekly: [{WEEKLY}, {LEAD}]}}\n"
         "targets:\n"
         "  - {id: dash, tier: customer, manifest: d.yml, version_model: pinned, builder: hmi-west,\n"
         f"     build: {{profile: full}}, toolchain: {{arm-gnu: 12.3.rel1}}, triggers: [nightly], owners: [{DASH_OWNER}]}}\n"
@@ -245,7 +246,7 @@ def test_weekly_goes_to_everyone_in_the_table(tmp_path):
         "--outbox", str(outbox),
     ], env={}) == 0
     (eml,) = outbox.glob("*.eml")
-    assert sorted(a.strip() for a in read_eml(eml)["To"].split(",")) == [CI, DASH_OWNER, LEAD]
+    assert sorted(a.strip() for a in read_eml(eml)["To"].split(",")) == [CI, DASH_OWNER, LEAD, WEEKLY]
 
 
 class FakeSMTP:

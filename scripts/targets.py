@@ -28,7 +28,7 @@ EMAIL_PATTERN = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$")
 
 TOP_LEVEL_FIELDS = ("schema_version", "targets")
 TOP_LEVEL_OPTIONAL = ("notify",)
-NOTIFY_FIELDS = ("ci_maintainers", "watchers")
+NOTIFY_FIELDS = ("ci_maintainers", "watchers", "weekly")
 REQUIRED_FIELDS = (
     "id",
     "tier",
@@ -75,6 +75,7 @@ class Notify:
 
     ci_maintainers: tuple[str, ...] = ()  # every mail; the only ones told about INFRA_FAIL
     watchers: tuple[str, ...] = ()  # every SDK mail and the weekly summary
+    weekly: tuple[str, ...] = ()  # the weekly summary only
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
