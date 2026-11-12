@@ -21,11 +21,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # rtl8773g-chargebox is left out until its pinned lvgl revision exists on github.
         include:
+          - id: rtl8773g-chargebox
+            manifest: chargebox/rtl8773g-chargebox-github.yml
+            # app dir (relative to zephyrproject/realtek-app) | board | extra cmake args
+            builds: |
+              applications/chargebox|rtl87x3g_evb|
+              samples/honeygui|rtl87x3g_sample|-DENABLE_GENERATE_VERSION=OFF
+              samples/lvgl|rtl87x3g_sample|-DENABLE_GENERATE_VERSION=OFF
           - id: rtl8773g-dashboard
             manifest: dashboard/rtl8773g-dashboard-github.yml
-            # app dir (relative to zephyrproject/realtek-app) | board | extra cmake args
             builds: |
               applications/dashboard|rtl87x3g_evb|
               samples/honeygui|rtl87x3g_sample|-DENABLE_GENERATE_VERSION=OFF
