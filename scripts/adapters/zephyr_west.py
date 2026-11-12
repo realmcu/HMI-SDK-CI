@@ -29,6 +29,9 @@ FETCH_ASSETS = "fetch_assets.py"
 # md5_generate.sh renames <app>/bin/app_MP.bin to app_MP-v<version>-<gcid>-<md5>.bin.
 SIGNED_IMAGE = "bin/app_MP-*.bin"
 EXCERPT_LINES = 40
+# Ninja echoes the full compiler command (several KB) after FAILED:; clip it so the
+# diagnostics stay readable in the summary and mail.
+EXCERPT_LINE_CHARS = 300
 
 Runner = Callable[[list[str], Path, Path], int]
 
@@ -123,7 +126,9 @@ def log_excerpt(log: Path) -> str:
     marks = [i for i, line in enumerate(lines) if "error:" in line.lower() or "FAILED:" in line
              or "Permission denied" in line or "CMake Error" in line]
     start = max(0, marks[0] - 5) if marks else max(0, len(lines) - EXCERPT_LINES)
-    return "\n".join(lines[start : start + EXCERPT_LINES])
+    clip = EXCERPT_LINE_CHARS
+    return "\n".join(line if len(line) <= clip else line[:clip] + " [...]"
+                     for line in lines[start : start + EXCERPT_LINES])
 
 
 def fetch_sdk_tag(workspace: Path, sdk: Path) -> str:

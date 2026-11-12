@@ -134,6 +134,14 @@ def test_worst_product_decides_and_failure_has_excerpt(sdk):
     assert "sample log excerpt" in markdown
 
 
+def test_excerpt_clips_compiler_command(tmp_path):
+    log = tmp_path / "build.log"
+    log.write_text("FAILED: x.obj\n" + "gcc " + "-I/very/long/path " * 500 + "\nx.c:1:1: error: boom\n")
+    lines = zephyr_west.log_excerpt(log).splitlines()
+    assert len(lines[1]) <= zephyr_west.EXCERPT_LINE_CHARS + 6 and lines[1].endswith("[...]")
+    assert lines[2] == "x.c:1:1: error: boom"
+
+
 def test_missing_signed_image_fails(sdk):
     code, summary, _ = run(sdk, FakeRunner(unsigned={"app"}))
     assert code == 1
