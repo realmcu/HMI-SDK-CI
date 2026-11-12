@@ -154,7 +154,7 @@ every Thursday. Push and pull-request runs never mail.
 | It keeps failing the same way | not again; it appears in the weekly summary |
 | `FETCH_FAIL` | on the second run in a row, and when fetching works again |
 | `preview` targets | never; Job Summary only |
-| Thursday | weekly summary: every target's state, pass counts, and the nights with no results |
+| Thursday | weekly summary: every target's state, nightly pass counts, and the nights with no results |
 
 A failing `locked` track is marked ⚠ and listed first. A run's mail holds every change of that run.
 

@@ -343,8 +343,12 @@ def weekly_report(runs: list[dict], results_by_run: dict[str, dict], today: date
     recorded.sort(key=lambda item: item[0])
     nights = {created.date() for created, event, _ in recorded if event == "schedule"}
 
+    # Counts cover nightly runs only, so they read as "nights out of the week";
+    # dispatched runs are mostly debugging, but still set the latest state.
     tally: dict[str, Counter] = {}
-    for _, _, results in recorded:
+    for _, event, results in recorded:
+        if event != "schedule":
+            continue
         for e in results.get("entries", []):
             tally.setdefault(e["key"], Counter())[e["status"]] += 1
     latest: dict[str, dict] = {}
@@ -407,9 +411,9 @@ def weekly_blocks(report: dict, runs_url: str) -> list[Block]:
             ("p", "No nightly results for " + ", ".join(report["missing"]) + ": the schedule was skipped, or the run "
              "died before recording results.")
         )
-    rows = [["Target", "Track", "Tier", "Latest", "State", "This week"]]
+    rows = [["Target", "Track", "Tier", "Latest", "State", "Nightly this week"]]
     for row in report["rows"]:
-        week = f"{row['passed']}/{row['verified']} passed"
+        week = f"{row['passed']} of {row['verified']} passed"
         if row["unverified"]:
             week += f", {row['unverified']} unverified"
         rows.append([row["id"], row["track"], row["tier"], row["status"], row["state"], week])

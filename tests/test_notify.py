@@ -227,7 +227,10 @@ def test_weekly_report_counts_nights_and_missing_days():
     assert report["nights"] == 3 and report["runs"] == 4
     assert report["missing"] == ["2026-11-03", "2026-11-06", "2026-11-07", "2026-11-08"]
     (row,) = report["rows"]
-    assert (row["state"], row["passed"], row["verified"], row["unverified"]) == ("failing for 2 runs", 1, 3, 1)
+    # The dispatched run sets the latest state but is left out of the nightly counts.
+    assert (row["state"], row["passed"], row["verified"], row["unverified"]) == ("failing for 2 runs", 1, 2, 1)
+    (table,) = [rows for kind, rows in notify.weekly_blocks(report, "u") if kind == "table"]
+    assert table[0][-1] == "Nightly this week" and table[1][-1] == "1 of 2 passed, 1 unverified"
     assert notify.weekly_subject(report) == "[HMI SDK CI] weekly 2026-11-02..2026-11-08: 3/7 nightly runs, 1 failing"
 
 
