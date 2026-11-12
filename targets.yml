@@ -45,7 +45,7 @@ targets:
       zephyr-sdk: 0.16.9
     triggers: [nightly, on-change]
     timeout: 45
-    owners: [luke_sun@realsil.com.cn]
+    owners: [astor_zhang@realsil.com.cn]
 
   - id: rtl8773g-chargebox
     tier: preview
