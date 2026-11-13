@@ -120,10 +120,13 @@ def aggregate(plan: dict, results: list[dict], previous: dict[str, dict], run: d
                 }
             )
     # A run limited to some targets (a manifest-change dispatch) must not erase
-    # the others' history, or their next run would look like a first run.
+    # the others' history, or their next run would look like a first run. Tracks
+    # a built target no longer has (its lock was dropped) are not carried.
     seen = {e["key"] for e in entries}
     carried = [
-        {**entry, "change": "not-run"} for key, entry in previous.items() if key not in seen
+        {**entry, "change": "not-run"}
+        for key, entry in previous.items()
+        if key not in seen and entry.get("id") not in planned_tracks
     ]
     return {"schema_version": SCHEMA_VERSION, "run": run, "entries": entries, "carried": carried}
 

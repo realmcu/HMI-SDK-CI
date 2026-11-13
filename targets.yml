@@ -17,13 +17,14 @@ notify:
     - wenjing_jiang@realsil.com.cn
 
 targets:
-  # Fetched from github only; the lock stays the gitee one, with its gitee URLs.
+  # Fetched from github only. Lock checks are paused while the manifest pins every
+  # project: to resume, add back lock_manifest: dashboard/rtl8773e-dashboard-gitee.lock.yml
+  # and version_model: floating once the manifest follows branches again.
   - id: rtl8773e-dashboard
     tier: customer
     manifest: dashboard/rtl8773e-dashboard-github.yml
     mirror_manifest: dashboard/rtl8773e-dashboard-gitee.yml
-    lock_manifest: dashboard/rtl8773e-dashboard-gitee.lock.yml
-    version_model: floating
+    version_model: pinned
     builder: hmi-west
     build:
       profile: full

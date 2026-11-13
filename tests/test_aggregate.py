@@ -123,6 +123,16 @@ def test_partial_run_carries_other_targets_forward(tmp_path):
     assert aggregate.classify("BUILD_FAIL", loaded["other/main"]).change == "still-failing"
 
 
+def test_dropped_tracks_of_a_built_target_are_not_carried():
+    previous = {
+        "dash/floating": {"key": "dash/floating", "id": "dash", "status": "BUILD_FAIL", "failing": True},
+        "dash/locked": {"key": "dash/locked", "id": "dash", "status": "PASS", "failing": False},
+    }
+    report = aggregate.aggregate(plan(tracks=("main",)), results(main="PASS"), previous, {})
+    assert [e["key"] for e in report["entries"]] == ["dash/main"]
+    assert report["carried"] == []
+
+
 @pytest.mark.parametrize("content", [None, {"schema_version": 99, "entries": []}])
 def test_unusable_previous_is_ignored(tmp_path, content):
     path = tmp_path / "prev.json"
