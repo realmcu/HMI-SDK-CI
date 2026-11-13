@@ -114,13 +114,20 @@ def failed_on_gitee(failure: Failure, manifest_path: Path) -> bool:
 def derive_mirror_manifest(source: Path, target: Path) -> None:
     """Write a copy of a SHA-pinned manifest with gitee https URLs pointing at github.
 
+    Only project URLs are checked: comments, such as a lock's usage banner, may
+    still name gitee.
+
     Raises:
-        ValueError: a gitee URL survived the rewrite.
+        ValueError: a project URL still points at gitee, or the copy is not a manifest.
     """
     text = source.read_text(encoding="utf-8").replace("https://gitee.com/", "https://github.com/")
-    if "gitee.com" in text:
-        raise ValueError(f"could not rewrite every gitee URL in {source.name}")
     target.write_text(text, encoding="utf-8")
+    try:
+        left = [p.name for p in load_projects(target) if is_gitee(p.url)]
+    except ManifestError as exc:
+        raise ValueError(str(exc)) from exc
+    if left:
+        raise ValueError(f"could not rewrite every gitee URL in {source.name}: {', '.join(left)}")
 
 
 def derive_github_copy(workspace: Path, manifest_dir: str, manifest: str) -> str:

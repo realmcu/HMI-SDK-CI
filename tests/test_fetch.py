@@ -191,9 +191,17 @@ def test_derive_primary_excludes_fallbacks(workspace):
                     "--derive-primary", "--derive-fallback"])
 
 
+def test_derive_ignores_gitee_in_comments(tmp_path):
+    source = tmp_path / "a.lock.yml"
+    source.write_text("# west init -m git@gitee.com:realmcu/hmi-manifest.git\n" + LOCK, encoding="utf-8")
+    fetch.derive_mirror_manifest(source, tmp_path / "b.yml")
+    assert "url: https://github.com/realmcu/hmi" in (tmp_path / "b.yml").read_text(encoding="utf-8")
+
+
 def test_derive_refuses_leftover_gitee_url(tmp_path):
     source = tmp_path / "a.yml"
-    source.write_text("manifest:\n  remotes:\n    - {name: g, url-base: ssh://git@gitee.com}\n", encoding="utf-8")
+    source.write_text("manifest:\n  remotes:\n    - {name: g, url-base: ssh://git@gitee.com}\n"
+                      "  projects:\n    - {name: x, remote: g, revision: %s}\n" % ("a" * 40), encoding="utf-8")
     with pytest.raises(ValueError, match="could not rewrite"):
         fetch.derive_mirror_manifest(source, tmp_path / "b.yml")
 
