@@ -31,7 +31,7 @@ targets:
       arm-gnu: 12.3.rel1
     triggers: [nightly, on-change]
     timeout: 60
-    owners: [luke_sun@realsil.com.cn]
+    owners: [astor_zhang@realsil.com.cn]
 
   # x3G SDKs pull the zsdk and zephyr from github even through their gitee manifest,
   # so the github manifest is primary and has nothing to fall back to.
