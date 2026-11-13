@@ -30,7 +30,7 @@ schema_version: 1
 targets:
   - id: rtl8773e-dashboard
     tier: customer
-    manifest: dashboard/rtl8773e-dashboard-gitee.yml
+    manifest: dashboard/rtl8773e-dashboard-github.yml
     # ...
 ```
 
@@ -44,7 +44,7 @@ table lists fixed mail recipients (see [Mail](#mail)).
 | `manifest` | yes | Primary manifest (`.yml`). |
 | `fallback_manifest` | no | Manifest to retry with when the primary fails for network reasons. A fallback build never produces a lock promotion. |
 | `mirror_manifest` | no | The other public manifest of the same SDK. Checked against the primary like a fallback, but never fetched. Not combined with `fallback_manifest`. |
-| `lock_manifest` | no | Fully pinned snapshot. Adds a `locked` track and a drift report. Requires `version_model: floating`. |
+| `lock_manifest` | no | Fully pinned snapshot named `<floating>.lock.yml`, where `<floating>.yml` is `manifest` or `mirror_manifest`. Adds a `locked` track and a drift report. Requires `version_model: floating`. |
 | `version_model` | yes | `pinned`, `mixed` or `floating`. A `customer` target must be `pinned`, or `floating` with a `lock_manifest`, and must not use workarounds. |
 | `builder` | yes | Build adapter: `hmi-west` or `zephyr-west`. |
 | `build` | yes | Adapter parameters, checked per adapter (see below). |
@@ -120,6 +120,10 @@ when there is one, and runs the build adapter. Reports are uploaded as
 A network failure on a gitee repository is retried, then retried against `fallback_manifest` (for the
 `locked` track, a mirror copy derived from the lock). A failure on a github repository has no mirror
 to fall back to. A build from the mirror never produces a lock promotion.
+
+A gitee lock can be verified from github: when `lock_manifest` belongs to the gitee `mirror_manifest`,
+both tracks fetch only from github (the `locked` track uses a github copy derived from the lock), and
+the promoted lock gets the gitee URLs of its floating manifest back.
 
 ## Lock promotion
 

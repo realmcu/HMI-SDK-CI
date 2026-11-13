@@ -80,6 +80,46 @@ def test_package_holds_lock_report_and_provenance(tmp_path):
     }
 
 
+GITEE_FLOATING = """\
+manifest:
+  remotes:
+    - {name: origin, url-base: https://gitee.com}
+  defaults: {remote: origin}
+  projects:
+    - {name: app, repo-path: realmcu/hmi, revision: main, path: app}
+"""
+
+
+def rehost_setup(tmp_path, frozen_url):
+    manifest = tmp_path / "manifest"
+    (manifest / "scripts").mkdir(parents=True)
+    (manifest / "scripts" / "bump_lock.py").write_text(FAKE_BUMP)
+    (manifest / "d-gitee.lock.yml").write_text("old lock\n")
+    (manifest / "d-gitee.yml").write_text(GITEE_FLOATING)
+    candidate = tmp_path / "frozen.yml"
+    candidate.write_text(f"manifest:\n  projects:\n    - {{name: app, url: {frozen_url}, revision: {SHA_A}, path: app}}\n")
+    args = [
+        "--manifest-dir", str(manifest), "--lock", "d-gitee.lock.yml", "--floating", "d-gitee.yml",
+        "--candidate", str(candidate), "--repos", str(tmp_path), "--manifest-repository", "realmcu/HMI-MANIFEST",
+        "--manifest-commit", SHA_B, "--out", str(tmp_path / "promotion"), "--rehost-candidate",
+    ]
+    return args
+
+
+def test_rehost_gives_the_lock_gitee_urls(tmp_path):
+    assert promotion.main(rehost_setup(tmp_path, "https://github.com/realmcu/hmi"), env=ENV) == 0
+    out = tmp_path / "promotion"
+    lock = (out / "d-gitee.lock.yml").read_text()
+    assert "url: https://gitee.com/realmcu/hmi," in lock and "github.com/realmcu/hmi" not in lock
+    assert sorted(p.name for p in out.iterdir()) == [
+        "d-gitee.lock.yml", "d-gitee.yml", "promotion-metadata.json", "promotion-report.md"]
+
+
+def test_rehost_rejects_a_project_from_another_host(tmp_path, capsys):
+    assert promotion.main(rehost_setup(tmp_path, "https://example.com/realmcu/hmi"), env=ENV) == 1
+    assert "do not match d-gitee.yml after rehosting: app" in capsys.readouterr().err
+
+
 def test_failed_bump_is_an_error(tmp_path, capsys):
     manifest = tmp_path / "manifest"
     (manifest / "scripts").mkdir(parents=True)

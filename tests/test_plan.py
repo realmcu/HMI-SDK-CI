@@ -257,6 +257,28 @@ def test_nightly_plan(workspace):
         ("floating", "dashboard/e-gitee.yml", "dashboard/e-github.yml", "dashboard/e-gitee.lock.yml", False),
         ("locked", "dashboard/e-gitee.lock.yml", None, None, True),
     ]
+    assert [(e["lock_source"], e["derive_primary"]) for e in report["matrix"]["include"]] == [
+        ("dashboard/e-gitee.yml", False),
+        (None, False),
+    ]
+
+
+def test_github_primary_with_gitee_lock(workspace):
+    tmp_path, _, targets = workspace
+    targets.write_text(TARGETS.replace(
+        "    manifest: dashboard/e-gitee.yml\n    fallback_manifest: dashboard/e-github.yml\n",
+        "    manifest: dashboard/e-github.yml\n    mirror_manifest: dashboard/e-gitee.yml\n",
+    ), encoding="utf-8")
+    _, report = run_plan(workspace, "--event", "nightly")
+    assert by_id(report)["e-dashboard"]["errors"] == []
+    tracks = [
+        (e["track"], e["manifest"], e["fallback_manifest"], e["lock_source"], e["derive_fallback"], e["derive_primary"])
+        for e in report["matrix"]["include"]
+    ]
+    assert tracks == [
+        ("floating", "dashboard/e-github.yml", None, "dashboard/e-gitee.yml", False, False),
+        ("locked", "dashboard/e-gitee.lock.yml", None, None, False, True),
+    ]
 
 
 def test_manual_plan_runs_every_enabled_target(workspace):

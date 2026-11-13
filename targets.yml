@@ -17,10 +17,11 @@ notify:
     - wenjing_jiang@realsil.com.cn
 
 targets:
+  # Fetched from github only; the lock stays the gitee one, with its gitee URLs.
   - id: rtl8773e-dashboard
     tier: customer
-    manifest: dashboard/rtl8773e-dashboard-gitee.yml
-    fallback_manifest: dashboard/rtl8773e-dashboard-github.yml
+    manifest: dashboard/rtl8773e-dashboard-github.yml
+    mirror_manifest: dashboard/rtl8773e-dashboard-gitee.yml
     lock_manifest: dashboard/rtl8773e-dashboard-gitee.lock.yml
     version_model: floating
     builder: hmi-west

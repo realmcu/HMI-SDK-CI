@@ -175,6 +175,22 @@ def test_locked_track_derives_mirror(workspace):
     assert "/dashboard/p-github.lock.yml" in exclude
 
 
+def test_derive_primary_fetches_only_the_github_copy(workspace):
+    root, logs = workspace
+    west = FakeWest({"dashboard/p-github.lock.yml": [NETWORK_APP] * 3})
+    result = fetch.fetch(root, ".manifest", "dashboard/p-gitee.lock.yml", None, False, 3, 2, logs,
+                         run=west, sleep=lambda s: None, derive_primary=True)
+    assert (result.status, result.manifest, result.used_fallback) == ("FETCH_FAIL", "dashboard/p-github.lock.yml", False)
+    assert set(west.updates) == {"dashboard/p-github.lock.yml"}
+
+
+def test_derive_primary_excludes_fallbacks(workspace):
+    root, logs = workspace
+    with pytest.raises(SystemExit):
+        fetch.main(["--workspace", str(root), "--manifest", "dashboard/p-gitee.lock.yml", "--report-dir", str(logs),
+                    "--derive-primary", "--derive-fallback"])
+
+
 def test_derive_refuses_leftover_gitee_url(tmp_path):
     source = tmp_path / "a.yml"
     source.write_text("manifest:\n  remotes:\n    - {name: g, url-base: ssh://git@gitee.com}\n", encoding="utf-8")
@@ -188,7 +204,7 @@ def test_main_writes_report_and_env(workspace, monkeypatch):
     monkeypatch.setenv("GITHUB_ENV", str(env_file))
     west = FakeWest({"dashboard/p-gitee.yml": [CONTENT_APP]})
     monkeypatch.setattr(fetch, "run_streaming", west)
-    monkeypatch.setattr(fetch.fetch, "__defaults__", (west, lambda s: None))
+    monkeypatch.setattr(fetch.fetch, "__defaults__", (west, lambda s: None, False))
     code = fetch.main(["--workspace", str(root), "--manifest", "dashboard/p-gitee.yml", "--report-dir", str(logs)])
     assert code == 1
     assert json.loads((logs / "fetch.json").read_text(encoding="utf-8"))["status"] == "MANIFEST_FAIL"

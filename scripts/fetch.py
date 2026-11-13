@@ -123,6 +123,21 @@ def derive_mirror_manifest(source: Path, target: Path) -> None:
     target.write_text(text, encoding="utf-8")
 
 
+def derive_github_copy(workspace: Path, manifest_dir: str, manifest: str) -> str:
+    """Derive the github copy of a SHA-pinned manifest next to it; returns its name."""
+    derived = manifest.replace("-gitee.", "-github.", 1)
+    if derived == manifest:
+        derived = manifest.replace(".yml", ".github-mirror.yml")
+    derive_mirror_manifest(workspace / manifest_dir / manifest, workspace / manifest_dir / derived)
+    # verify_dashboard.py refuses to build when any west project is dirty,
+    # and the manifest checkout is one of them.
+    exclude = workspace / manifest_dir / ".git" / "info" / "exclude"
+    if exclude.parent.is_dir():
+        with exclude.open("a", encoding="utf-8") as handle:
+            handle.write(f"/{derived}\n")
+    return derived
+
+
 Runner = Callable[[Sequence[str], Path], "tuple[int, str]"]
 
 
@@ -207,8 +222,11 @@ def fetch(
     log_dir: Path,
     run: Runner = run_streaming,
     sleep: Callable[[float], None] = time.sleep,
+    derive_primary: bool = False,
 ) -> FetchResult:
     attempts: list[Attempt] = []
+    if derive_primary:
+        manifest = derive_github_copy(workspace, manifest_dir, manifest)
     code, output = run(["west", "init", "-l", manifest_dir, "--mf", manifest], workspace)
     if code != 0:
         raise RuntimeError(f"west init failed:\n{output}")
@@ -229,17 +247,7 @@ def fetch(
         return FetchResult("FETCH_FAIL", manifest, reason=failure.reason, attempts=attempts)
 
     if derive_fallback:
-        source = workspace / manifest_dir / manifest
-        fallback = manifest.replace("-gitee.", "-github.", 1)
-        if fallback == manifest:
-            fallback = manifest.replace(".yml", ".github-mirror.yml")
-        derive_mirror_manifest(source, workspace / manifest_dir / fallback)
-        # verify_dashboard.py refuses to build when any west project is dirty,
-        # and the manifest checkout is one of them.
-        exclude = workspace / manifest_dir / ".git" / "info" / "exclude"
-        if exclude.parent.is_dir():
-            with exclude.open("a", encoding="utf-8") as handle:
-                handle.write(f"/{fallback}\n")
+        fallback = derive_github_copy(workspace, manifest_dir, manifest)
     assert fallback is not None
     print(f"::warning::gitee fetch failed ({failure.reason}); retrying against {fallback}")
     second = update_with(workspace, fallback, fallback_retries, run, sleep, attempts, log_dir)
@@ -262,12 +270,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="derive the mirror manifest from a SHA-pinned manifest instead of --fallback",
     )
+    parser.add_argument(
+        "--derive-primary",
+        action="store_true",
+        help="fetch only the github copy derived from the SHA-pinned --manifest",
+    )
     parser.add_argument("--retries", type=int, default=4)
     parser.add_argument("--fallback-retries", type=int, default=2)
     parser.add_argument("--report-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.fallback and args.derive_fallback:
         parser.error("--fallback and --derive-fallback are mutually exclusive")
+    if args.derive_primary and (args.fallback or args.derive_fallback):
+        parser.error("--derive-primary has no fallback; drop --fallback and --derive-fallback")
 
     args.report_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -280,6 +295,7 @@ def main(argv: list[str] | None = None) -> int:
             args.retries,
             args.fallback_retries,
             args.report_dir,
+            derive_primary=args.derive_primary,
         )
     except (RuntimeError, ValueError, OSError) as exc:
         print(f"::error::{exc}", file=sys.stderr)

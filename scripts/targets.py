@@ -68,6 +68,15 @@ class Target:
     owners: tuple[str, ...] = ()
     timeout: int | None = None
 
+    @property
+    def lock_source(self) -> str | None:
+        """The floating manifest the lock is generated from: ``X.lock.yml`` comes from ``X.yml``."""
+        return lock_source_of(self.lock_manifest) if self.lock_manifest else None
+
+
+def lock_source_of(lock: str) -> str:
+    return lock[: -len(".lock.yml")] + ".yml" if lock.endswith(".lock.yml") else lock
+
 
 @dataclass(frozen=True)
 class Notify:
@@ -305,6 +314,18 @@ def _check_cross_fields(raw: dict[str, Any], where: str, errors: list[str]) -> N
         errors.append(f"{where}.fallback_manifest: must differ from lock_manifest")
     if lock is not None and model != "floating":
         errors.append(f"{where}.lock_manifest: requires version_model floating (got {model!r})")
+    if lock is not None:
+        # promote_lock.py requires the package to name the lock's own floating manifest.
+        source = lock_source_of(lock)
+        if source == lock:
+            errors.append(f"{where}.lock_manifest: must be named <floating>.lock.yml (got {lock!r})")
+        elif source not in (manifest, mirror):
+            errors.append(f"{where}.lock_manifest: its floating manifest {source!r} must be the manifest "
+                          "or the mirror_manifest")
+        elif source == mirror and "-gitee." not in lock:
+            # The locked track fetches a github copy derived from the gitee lock.
+            errors.append(f"{where}.lock_manifest: a lock of the mirror_manifest must be a gitee lock "
+                          f"(got {lock!r})")
 
     if raw["tier"] == "customer":
         if model == "mixed" or (model == "floating" and lock is None):

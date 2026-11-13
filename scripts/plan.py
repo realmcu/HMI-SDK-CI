@@ -128,18 +128,19 @@ def matrix_entries(plan: TargetPlan) -> list[dict]:
         "timeout": target.timeout,
         "artifacts": list(target.artifacts),
     }
+    none = {"lock_manifest": None, "lock_source": None, "derive_fallback": False, "derive_primary": False}
     if target.lock_manifest is None:
-        return [{**base, "track": "main", "manifest": target.manifest,
-                 "fallback_manifest": target.fallback_manifest, "lock_manifest": None,
-                 "derive_fallback": False}]
-    # The locked track derives its mirror manifest from the lock at fetch time,
-    # so the two can never drift apart.
+        return [{**base, **none, "track": "main", "manifest": target.manifest,
+                 "fallback_manifest": target.fallback_manifest}]
+    # A lock of the gitee mirror keeps gitee URLs, but both tracks fetch from github (D15).
+    # Mirror manifests are derived from the lock at fetch time, so the two never drift apart.
+    of_mirror = target.lock_source != target.manifest
     return [
-        {**base, "track": "floating", "manifest": target.manifest,
+        {**base, **none, "track": "floating", "manifest": target.manifest,
          "fallback_manifest": target.fallback_manifest, "lock_manifest": target.lock_manifest,
-         "derive_fallback": False},
-        {**base, "track": "locked", "manifest": target.lock_manifest, "fallback_manifest": None,
-         "lock_manifest": None, "derive_fallback": target.fallback_manifest is not None},
+         "lock_source": target.lock_source},
+        {**base, **none, "track": "locked", "manifest": target.lock_manifest, "fallback_manifest": None,
+         "derive_fallback": target.fallback_manifest is not None, "derive_primary": of_mirror},
     ]
 
 

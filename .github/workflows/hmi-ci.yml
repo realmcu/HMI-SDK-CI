@@ -158,10 +158,12 @@ jobs:
           MANIFEST: ${{ matrix.manifest }}
           FALLBACK: ${{ matrix.fallback_manifest }}
           DERIVE: ${{ matrix.derive_fallback }}
+          DERIVE_PRIMARY: ${{ matrix.derive_primary }}
         run: |
           args=(--workspace "${WS}" --manifest "${MANIFEST}" --report-dir "${REPORT_DIR}/fetch")
           [ -n "${FALLBACK}" ] && args+=(--fallback "${FALLBACK}")
           [ "${DERIVE}" = "true" ] && args+=(--derive-fallback)
+          [ "${DERIVE_PRIMARY}" = "true" ] && args+=(--derive-primary)
           python ci/scripts/fetch.py "${args[@]}"
 
       - name: Record verified revisions
@@ -208,7 +210,7 @@ jobs:
             --jobs "$(nproc)" \
             --report-dir "${REPORT_DIR}/build"
 
-      # A mirror build must not become the gitee lock; a manifest branch other than
+      # A fallback build must not become the lock; a manifest branch other than
       # master cannot be promoted, and push runs test CI changes.
       - name: Package lock promotion
         id: promotion
@@ -218,9 +220,13 @@ jobs:
           && (inputs.manifest_ref || 'master') == 'master'
         env:
           LOCK: ${{ matrix.lock_manifest }}
-          FLOATING: ${{ matrix.manifest }}
+          # promote_lock.py expects the lock's own floating manifest, not the one fetched.
+          FLOATING: ${{ matrix.lock_source }}
+          FETCHED: ${{ matrix.manifest }}
           MANIFEST_COMMIT: ${{ needs.plan.outputs.manifest_commit }}
         run: |
+          args=()
+          [ "${FLOATING}" != "${FETCHED}" ] && args+=(--rehost-candidate)
           python ci/scripts/promotion.py \
             --manifest-dir ws/.manifest \
             --lock "${LOCK}" \
@@ -229,7 +235,8 @@ jobs:
             --repos "${WS}" \
             --manifest-repository realmcu/HMI-MANIFEST \
             --manifest-commit "${MANIFEST_COMMIT}" \
-            --out promotion
+            --out promotion \
+            "${args[@]}"
 
       - name: Upload lock promotion
         if: steps.promotion.outcome == 'success'
@@ -308,7 +315,7 @@ jobs:
             echo "Manifest: \`${FETCHED_MANIFEST:-${MANIFEST}}\`"
             if [ "${USED_FALLBACK}" = "true" ]; then
               echo
-              echo "_Fetched from the GitHub mirror after a gitee network failure; no lock promotion is produced from this run._"
+              echo "_Fetched from the fallback manifest after a network failure; no lock promotion is produced from this run._"
             fi
             echo
             [ -f "${REPORT_DIR}/build/summary.md" ] && cat "${REPORT_DIR}/build/summary.md"

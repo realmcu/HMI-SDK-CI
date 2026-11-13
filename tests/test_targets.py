@@ -66,6 +66,7 @@ def test_notify_is_optional():
 def test_valid_target_round_trips():
     (parsed,) = parse_targets(config())
     assert parsed.lock_manifest == "dashboard/rtl8773e-dashboard-gitee.lock.yml"
+    assert parsed.lock_source == "dashboard/rtl8773e-dashboard-gitee.yml"
     assert parsed.triggers == ("nightly",)
     assert parsed.artifacts == ()
 
@@ -156,6 +157,16 @@ def test_field_errors(changes, expected):
             ".fallback_manifest: must differ from lock_manifest",
         ),
         ({"version_model": "pinned"}, ".lock_manifest: requires version_model floating"),
+        ({"lock_manifest": "dashboard/lock.yml"}, ".lock_manifest: must be named <floating>.lock.yml"),
+        (
+            {"lock_manifest": "dashboard/rtl8773e-dashboard-github.lock.yml"},
+            "its floating manifest 'dashboard/rtl8773e-dashboard-github.yml' must be the manifest or",
+        ),
+        (
+            {"manifest": "dashboard/x-gitee.yml", "fallback_manifest": None,
+             "mirror_manifest": "dashboard/x-github.yml", "lock_manifest": "dashboard/x-github.lock.yml"},
+            "a lock of the mirror_manifest must be a gitee lock",
+        ),
         (
             {"version_model": "mixed", "lock_manifest": None},
             "customer targets must be pinned, or floating with a lock_manifest (got mixed)",
